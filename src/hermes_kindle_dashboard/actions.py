@@ -85,13 +85,20 @@ class ActionRegistry:
                 raise InvalidNonceError("Nonce has already been used within the 60s TTL")
 
             # 3. Allowlist check
-            if action not in self._allowed:
+            matched_key = action if action in self._allowed else None
+            if matched_key is None:
+                for allowed_action in self._allowed:
+                    if action.startswith(allowed_action + ".") or action.startswith(allowed_action + ":"):
+                        matched_key = allowed_action
+                        break
+
+            if matched_key is None:
                 LOGGER.warning("action=%s result=forbidden", action)
                 raise UnknownActionError(f"Action '{action}' is not in the allowlist")
 
             # 4. Per-action rate limit check
-            limit = self._action_rate_limits.get(action, self._default_rate_limit)
-            last = self._last_executed.get(action)
+            limit = self._action_rate_limits.get(matched_key, self._default_rate_limit)
+            last = self._last_executed.get(matched_key)
             if last is not None and (current_time - last) < limit:
                 LOGGER.warning("action=%s result=rate_limited last=%f now=%f", action, last, current_time)
                 raise RateLimitExceededError(f"Rate limit exceeded for action '{action}'")
@@ -99,8 +106,8 @@ class ActionRegistry:
             # Record state
             if nonce:
                 self._nonces[nonce] = current_time
-            self._last_executed[action] = current_time
-            handler = self._handlers.get(action)
+            self._last_executed[matched_key] = current_time
+            handler = self._handlers.get(matched_key)
 
         # Execute handler outside lock if present
         if handler is not None:

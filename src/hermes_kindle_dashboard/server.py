@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlparse
 import uvicorn
 
 from .actions import ActionRegistry
+from .actions_runtime import register_all_actions
 from .aggregators.hermes import HermesAggregator
 from .api import ApiSettings, create_app
 from .render import RenderOptions, render_dashboard
@@ -324,6 +325,11 @@ def main(argv: list[str] | None = None) -> int:
 
     bus = ControlBus()
     registry = ActionRegistry()
+
+    actions_dir_str = os.getenv("HERMES_DASHBOARD_ACTIONS_DIR", "~/.config/hermes-kindle-dashboard")
+    actions_dir = Path(actions_dir_str).expanduser()
+    if actions_dir.exists():
+        register_all_actions(registry, actions_dir, logger=LOGGER)
     app = create_app(
         ApiSettings(
             token=token,
