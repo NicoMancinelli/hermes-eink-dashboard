@@ -1,0 +1,31 @@
+{
+  "items": [
+    {
+      "name": "Hermes Dashboard",
+      "priority": 10,
+      "items": [
+        {
+          "name": "Start Dashboard",
+          "priority": 1,
+          "action": "/bin/sh",
+          "params": "/mnt/us/extensions/hermes_dashboard/bin/start.sh",
+          "exitmenu": true
+        },
+        {
+          "name": "Manual Refresh",
+          "priority": 2,
+          "action": "/bin/sh",
+          "params": "/mnt/us/extensions/hermes_dashboard/bin/refresh.sh",
+          "exitmenu": false
+        },
+        {
+          "name": "Stop Dashboard",
+          "priority": 3,
+          "action": "/bin/sh",
+          "params": "/mnt/us/extensions/hermes_dashboard/bin/stop.sh",
+          "exitmenu": false
+        }
+      ]
+    }
+  ]
+}

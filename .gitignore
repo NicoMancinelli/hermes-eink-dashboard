@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+coverage.xml
+.coverage
+htmlcov/
+/dashboard.png
+/artifacts/*.png
+kindle/hermes_dashboard/config.sh
+.env
+host.env
+token

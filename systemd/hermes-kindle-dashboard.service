@@ -1,0 +1,22 @@
+[Unit]
+Description=Hermes E-Ink Kindle Dashboard
+Documentation=https://github.com/NicoMancinelli/hermes-kindle-dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/hermes-kindle-dashboard/host.env
+ExecStart=%h/.local/share/hermes-kindle-dashboard/venv/bin/hermes-kindle-dashboard
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateDevices=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

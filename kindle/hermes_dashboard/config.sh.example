@@ -1,0 +1,17 @@
+# Hermes Dashboard Kindle client configuration.
+# Copy to config.sh and replace HOST_IP and CHANGE_ME.
+
+HOST_IP="HOST_IP"
+HOST_PORT="9120"
+DASHBOARD_TOKEN="CHANGE_ME"
+DASHBOARD_URL="http://${HOST_IP}:${HOST_PORT}/dashboard.png?token=${DASHBOARD_TOKEN}"
+
+# E-Ink/power settings.
+REFRESH_INTERVAL="45"
+DOWNLOAD_TIMEOUT="12"
+FULL_REFRESH_EVERY="10"
+KEEP_AWAKE="1"
+STOP_FRAMEWORK="1"
+
+# Usually auto-detected. Set an absolute path if FBInk lives elsewhere.
+FBINK=""
