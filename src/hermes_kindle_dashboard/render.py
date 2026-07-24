@@ -231,3 +231,160 @@ def render_dashboard(snapshot: DashboardSnapshot, options: RenderOptions | None 
     if opts.bit_depth == 1:
         return image.convert("1", dither=Image.Dither.NONE)
     return image
+
+
+def render_layout_dashboard(
+    layout: dict[str, Any] | None = None,
+    snapshot: DashboardSnapshot | dict[str, Any] | None = None,
+    options: RenderOptions | None = None,
+) -> Image.Image:
+    from .contract import Tile, build_default_layout, dashboard_json
+
+    opts = options or RenderOptions()
+    if opts.width < 320 or opts.height < 480:
+        raise ValueError("dashboard dimensions must be at least 320x480")
+
+    effective_layout = dashboard_json(layout or build_default_layout(opts.width, opts.height))
+
+    width, height = opts.width, opts.height
+    scale = min(width / 600, height / 800)
+    px = lambda value: max(1, round(value * scale))
+    margin = px(18)
+    gap = px(10)
+    radius = px(8)
+
+    image = Image.new("L", (width, height), 255)
+    draw = ImageDraw.Draw(image)
+
+    title_font = _font(px(28), bold=True)
+    body_font = _font(px(13), bold=False)
+    small_font = _font(px(10), bold=True)
+    tiny_font = _font(px(9), bold=False)
+    tile_action_font = _font(px(14), bold=True)
+    panel_title_font = _font(px(15), bold=True)
+
+    header_h = px(74)
+    draw.rectangle((0, 0, width, header_h), fill=0)
+    draw.text((margin, px(14)), opts.title, fill=255, font=title_font)
+
+    stamp = "LIVE"
+    generated_at_str = None
+    if isinstance(snapshot, DashboardSnapshot):
+        generated_at_str = snapshot.generated_at
+    elif isinstance(snapshot, dict):
+        generated_at_str = snapshot.get("generated_at")
+
+    if generated_at_str:
+        try:
+            updated = datetime.fromisoformat(str(generated_at_str).replace("Z", "+00:00"))
+            stamp = updated.strftime("%H:%M UTC")
+        except ValueError:
+            stamp = "LIVE"
+
+    stamp_width = draw.textlength(stamp, font=small_font)
+    draw.text((width - margin - stamp_width, px(26)), stamp, fill=255, font=small_font)
+
+    grid_meta = effective_layout.get("layout", {})
+    cols = max(1, int(grid_meta.get("columns", 4)))
+    rows = max(1, int(grid_meta.get("rows", 6)))
+
+    content_top = header_h + gap
+    content_bottom = height - margin
+    avail_w = width - 2 * margin - (cols - 1) * gap
+    avail_h = content_bottom - content_top - (rows - 1) * gap
+
+    cell_w = avail_w / cols
+    cell_h = avail_h / rows
+
+    focus_meta = effective_layout.get("focus") or {}
+    focused_id = focus_meta.get("tile_id") if isinstance(focus_meta, dict) else None
+
+    raw_tiles = effective_layout.get("tiles", [])
+    tiles: list[Tile] = [
+        item if isinstance(item, Tile) else Tile.from_dict(item)
+        for item in raw_tiles
+        if isinstance(item, (Tile, dict))
+    ]
+
+    for tile in tiles:
+        x0 = round(margin + tile.col * (cell_w + gap))
+        y0 = round(content_top + tile.row * (cell_h + gap))
+        x1 = round(x0 + tile.w * cell_w + (tile.w - 1) * gap)
+        y1 = round(y0 + tile.h * cell_h + (tile.h - 1) * gap)
+        box = (x0, y0, x1, y1)
+
+        is_focused = (tile.id == focused_id)
+        border_w = 2 if is_focused else 1
+
+        draw.rounded_rectangle(box, radius=radius, fill=255, outline=0, width=border_w)
+
+        pad = px(10)
+        inner_x0, inner_y0 = x0 + pad, y0 + pad
+        inner_x1, inner_y1 = x1 - pad, y1 - pad
+        inner_w = inner_x1 - inner_x0
+        inner_h = inner_y1 - inner_y0
+
+        if tile.kind == "panel" or tile.panel is not None:
+            panel_name = (tile.panel or tile.label or "").lower()
+            draw.text(
+                (inner_x0, inner_y0),
+                _fit_text(draw, tile.label.upper(), panel_title_font, inner_w),
+                fill=0,
+                font=panel_title_font,
+            )
+
+            status_text = "STATUS: UNAVAILABLE"
+            hermes_snap: DashboardSnapshot | None = None
+
+            if isinstance(snapshot, DashboardSnapshot) and panel_name == "hermes":
+                hermes_snap = snapshot
+                status_text = f"STATUS: {snapshot.session.status.upper()}"
+            elif isinstance(snapshot, dict):
+                panels_dict = snapshot.get("panels", {})
+                pdata = panels_dict.get(panel_name, {})
+                meta = pdata.get("_meta", {}) if isinstance(pdata, dict) else {}
+                pstatus = meta.get("status", "unavailable") if isinstance(meta, dict) else "unavailable"
+                status_text = f"STATUS: {str(pstatus).upper()}"
+                if panel_name == "hermes" and pstatus in {"ok", "stale"}:
+                    try:
+                        clean_data = {k: v for k, v in pdata.items() if k != "_meta"}
+                        gen_at = meta.get("updated_at") or snapshot.get("generated_at", "")
+                        hermes_snap = DashboardSnapshot.from_panel(clean_data, str(gen_at))
+                    except Exception:
+                        pass
+
+            draw.text(
+                (inner_x0, inner_y0 + px(22)),
+                _fit_text(draw, status_text, small_font, inner_w),
+                fill=0,
+                font=small_font,
+            )
+
+            if hermes_snap is not None and inner_h > px(60):
+                py = inner_y0 + px(42)
+                model_str = f"MODEL: {hermes_snap.session.model}"
+                draw.text((inner_x0, py), _fit_text(draw, model_str, tiny_font, inner_w), fill=0, font=tiny_font)
+                py += px(16)
+                if py + px(16) <= inner_y1:
+                    title_str = _fit_text(draw, hermes_snap.session.title, body_font, inner_w)
+                    draw.text((inner_x0, py), title_str, fill=0, font=body_font)
+                    py += px(20)
+                if py + px(16) <= inner_y1:
+                    ctx_str = f"CONTEXT: {hermes_snap.session.context_percent}%  ·  TASKS: {len(hermes_snap.tasks)}"
+                    draw.text((inner_x0, py), _fit_text(draw, ctx_str, tiny_font, inner_w), fill=0, font=tiny_font)
+
+        else:
+            text_w = draw.textlength(tile.label, font=tile_action_font)
+            tx = inner_x0 + max(0, (inner_w - text_w) / 2)
+            ty = inner_y0 + max(0, (inner_h - px(16)) / 2)
+            draw.text(
+                (tx, ty),
+                _fit_text(draw, tile.label, tile_action_font, inner_w),
+                fill=0,
+                font=tile_action_font,
+            )
+
+    if opts.bit_depth == 1:
+        return image.convert("1", dither=Image.Dither.NONE)
+    return image
+

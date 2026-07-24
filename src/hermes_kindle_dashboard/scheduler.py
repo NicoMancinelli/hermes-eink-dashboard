@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from typing import Any
 
 from .aggregators.base import Aggregator
 from .contract import PanelCache
@@ -83,3 +84,39 @@ async def run_aggregator_loop(
             base = max(1.0, aggregator.interval_seconds)
             delay = min(_MAX_BACKOFF_SECONDS, base * (2 ** min(failures - 1, 6)))
         await _wait_or_stop(stop_event, delay)
+
+
+class ControlBus:
+    """Thread-safe in-memory pub/sub queue for control events with asyncio long-poll notification."""
+
+    def __init__(self) -> None:
+        import threading
+        self._lock = threading.Lock()
+        self._events: list[dict[str, Any]] = []
+        self._event = asyncio.Event()
+
+    def publish(self, event: dict[str, Any]) -> None:
+        with self._lock:
+            self._events.append(dict(event))
+        try:
+            loop = asyncio.get_running_loop()
+            loop.call_soon_threadsafe(self._event.set)
+        except RuntimeError:
+            self._event.set()
+
+    async def wait_for_event(self, timeout: float = 30.0) -> dict[str, Any] | None:
+        with self._lock:
+            if self._events:
+                return self._events.pop(0)
+            self._event.clear()
+
+        try:
+            await asyncio.wait_for(self._event.wait(), timeout=timeout)
+        except (TimeoutError, asyncio.TimeoutError):
+            return None
+
+        with self._lock:
+            if self._events:
+                return self._events.pop(0)
+            return None
+

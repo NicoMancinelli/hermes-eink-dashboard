@@ -201,8 +201,11 @@ TOKEN=development-only
 |---|---|---|
 | `GET /healthz` | none | `{"status":"ok"}` |
 | `GET /dashboard-data` | bearer only | versioned device-neutral panel data |
+| `GET /dashboard.json` | bearer or `?token=` | schema v2 tile layout (interactive clients) |
 | `GET /dashboard.png` | bearer or `?token=` | deprecated Kindle-compatible E-Ink PNG |
 | `GET /state.json` | bearer or `?token=` | deprecated pre-v1 Hermes state |
+| `POST /control` | bearer (control token) | dispatch a tile action (replay-protected) |
+| `GET /control/events` | bearer (control token) | long-poll for action results |
 
 `/dashboard-data` is the permanent renderer interface. Each panel carries `_meta.status`, `updated_at`, `last_attempt_at`, and a sanitized `error_code`. A failed refresh retains the last successful data with status `stale`; a panel with no successful data is `unavailable`. Clients must ignore unknown fields and reject unsupported `schema_version` values.
 
@@ -228,6 +231,19 @@ TOKEN=development-only
 ```
 
 Query auth is restricted to the deprecated routes because BusyBox `wget` header support varies across Kindle firmware. Uvicorn access logging is disabled so those query tokens are not logged.
+
+## Interactive client (Phase 1+2)
+
+The host-side interactive layer is in place:
+
+- Schema v2 tile layout at `GET /dashboard.json` with focus highlighting.
+- `POST /control` validates allowlist, 60s nonce dedup, ±30s timestamp window, and per-action rate limit (default 1/s).
+- `GET /control/events` returns long-poll responses when an action is dispatched.
+- `render_layout_dashboard()` paints a tile grid with a 2px focus border around the focused tile.
+- `--layout-yaml` flag loads a custom layout from a simple key:value file.
+- `--focus-tile` query parameter on `/dashboard.png` highlights the focused tile in the rendered PNG.
+
+The Kindle interactive client (5-way + touch) lands in Phase 3. The legacy read-only Kindle client continues to work unchanged.
 
 ## Security and privacy
 

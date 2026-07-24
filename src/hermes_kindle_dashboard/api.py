@@ -11,16 +11,25 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
+from .actions import (
+    ActionError,
+    ActionRegistry,
+    InvalidNonceError,
+    InvalidTimestampError,
+    RateLimitExceededError,
+    UnknownActionError,
+)
 from .aggregators.base import Aggregator
-from .contract import PanelCache
-from .render import RenderOptions, render_dashboard
-from .scheduler import collect_once, run_aggregator_loop
+from .contract import PanelCache, build_default_layout, dashboard_json
+from .render import RenderOptions, render_dashboard, render_layout_dashboard
+from .scheduler import ControlBus, collect_once, run_aggregator_loop
 from .state import DashboardSnapshot
 
 
 @dataclass(frozen=True)
 class ApiSettings:
     token: str
+    control_token: str = ""
     width: int = 1072
     height: int = 1448
     bit_depth: int = 1
@@ -38,6 +47,12 @@ def _authorized(request: Request, expected: str, *, allow_query: bool) -> bool:
 
 def _require_auth(request: Request, settings: ApiSettings, *, allow_query: bool = False) -> None:
     if not _authorized(request, settings.token, allow_query=allow_query):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized")
+
+
+def _require_control_auth(request: Request, settings: ApiSettings) -> None:
+    expected = settings.control_token or settings.token
+    if not _authorized(request, expected, allow_query=False):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized")
 
 
@@ -63,8 +78,13 @@ def create_app(
     settings: ApiSettings,
     aggregators: Iterable[Aggregator],
     cache: PanelCache | None = None,
+    bus: ControlBus | None = None,
+    registry: ActionRegistry | None = None,
+    layout: dict[str, Any] | None = None,
 ) -> FastAPI:
     panel_cache = cache or PanelCache()
+    control_bus = bus or ControlBus()
+    action_registry = registry or ActionRegistry()
     providers = tuple(aggregators)
     for provider in providers:
         panel_cache.register(provider.name)
@@ -97,6 +117,9 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.panel_cache = panel_cache
+    app.state.control_bus = control_bus
+    app.state.action_registry = action_registry
+    app.state.layout = layout
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -120,23 +143,93 @@ def create_app(
         return JSONResponse(_legacy_snapshot(panel_cache.snapshot()).to_dict())
 
     @app.get("/dashboard.png")
-    async def legacy_png(request: Request) -> Response:
+    async def legacy_png(
+        request: Request,
+        focus_tile: str | None = None,
+        focus_tile_id: str | None = None,
+    ) -> Response:
         _require_auth(request, settings, allow_query=True)
         snapshot = _legacy_snapshot(panel_cache.snapshot())
+        target_focus = (
+            focus_tile
+            or focus_tile_id
+            or request.query_params.get("focus-tile")
+            or request.query_params.get("focus_tile")
+            or request.query_params.get("focus_tile_id")
+        )
 
         def render_png() -> bytes:
-            image = render_dashboard(
-                snapshot,
-                RenderOptions(
-                    width=settings.width,
-                    height=settings.height,
-                    bit_depth=settings.bit_depth,
-                ),
+            opts = RenderOptions(
+                width=settings.width,
+                height=settings.height,
+                bit_depth=settings.bit_depth,
             )
+            if app.state.layout is not None or target_focus is not None:
+                eff_layout = dict(app.state.layout or build_default_layout(settings.width, settings.height))
+                if target_focus:
+                    eff_layout["focus"] = {"tile_id": target_focus}
+                image = render_layout_dashboard(eff_layout, snapshot, opts)
+            else:
+                image = render_dashboard(snapshot, opts)
+
             output = BytesIO()
             image.save(output, format="PNG", optimize=True)
             return output.getvalue()
 
         return Response(await run_in_threadpool(render_png), media_type="image/png")
 
+    @app.get("/dashboard.json")
+    async def get_dashboard_json(
+        request: Request,
+        focus_tile_id: str | None = None,
+        focus_tile: str | None = None,
+    ) -> JSONResponse:
+        _require_auth(request, settings, allow_query=True)
+        target_focus = (
+            focus_tile_id
+            or focus_tile
+            or request.query_params.get("focus-tile")
+            or request.query_params.get("focus_tile")
+        )
+        eff_layout = app.state.layout or build_default_layout(settings.width, settings.height)
+        return JSONResponse(dashboard_json(eff_layout, focus_tile_id=target_focus))
+
+
+    @app.post("/control")
+    async def post_control(request: Request) -> JSONResponse:
+        _require_control_auth(request, settings)
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid json")
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid body")
+
+        action = str(body.get("action", ""))
+        tile_id = str(body.get("tile_id", ""))
+        nonce = str(body.get("nonce", ""))
+        ts = body.get("ts", 0)
+
+        try:
+            res = action_registry.dispatch(action=action, tile_id=tile_id, nonce=nonce, ts=ts)
+        except UnknownActionError as error:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error))
+        except RateLimitExceededError as error:
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(error))
+        except (InvalidTimestampError, InvalidNonceError, ValueError, TypeError) as error:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+        except ActionError as error:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+
+        control_bus.publish(res)
+        return JSONResponse({"status": "ok", "action": action, "tile_id": tile_id})
+
+    @app.get("/control/events")
+    async def get_control_events(request: Request, timeout: float = 30.0) -> JSONResponse:
+        _require_control_auth(request, settings)
+        effective_timeout = min(max(0.0, float(timeout)), 30.0)
+        event = await control_bus.wait_for_event(timeout=effective_timeout)
+        return JSONResponse({"event": event})
+
     return app
+

@@ -127,3 +127,49 @@ def test_aggregator_loop_never_overlaps_collection() -> None:
     aggregator = asyncio.run(scenario())
     assert aggregator.calls == 3
     assert aggregator.max_active == 1
+
+
+def test_control_bus_publish_and_receive() -> None:
+    from hermes_kindle_dashboard.scheduler import ControlBus
+
+    bus = ControlBus()
+
+    async def scenario():
+        bus.publish({"tile_id": "wf:briefing", "action": "workflow.briefing"})
+        event = await bus.wait_for_event(timeout=1.0)
+        return event
+
+    event = asyncio.run(scenario())
+    assert event == {"tile_id": "wf:briefing", "action": "workflow.briefing"}
+
+
+def test_control_bus_wait_timeout() -> None:
+    from hermes_kindle_dashboard.scheduler import ControlBus
+
+    bus = ControlBus()
+
+    async def scenario():
+        return await bus.wait_for_event(timeout=0.01)
+
+    event = asyncio.run(scenario())
+    assert event is None
+
+
+def test_control_bus_async_wakeup() -> None:
+    from hermes_kindle_dashboard.scheduler import ControlBus
+
+    bus = ControlBus()
+
+    async def scenario():
+        async def delayed_publish():
+            await asyncio.sleep(0.02)
+            bus.publish({"action": "refresh"})
+
+        task = asyncio.create_task(delayed_publish())
+        event = await bus.wait_for_event(timeout=1.0)
+        await task
+        return event
+
+    event = asyncio.run(scenario())
+    assert event == {"action": "refresh"}
+

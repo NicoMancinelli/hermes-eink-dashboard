@@ -94,3 +94,68 @@ def test_cli_rejects_non_positive_refresh_interval(monkeypatch) -> None:
     monkeypatch.setenv("HERMES_DASHBOARD_REFRESH_SECONDS", "-1")
     with pytest.raises(SystemExit):
         build_parser().parse_args([])
+
+
+def test_cli_parses_control_token_args() -> None:
+    args = build_parser().parse_args(["--control-token", "ctrl-123"])
+    assert args.control_token == "ctrl-123"
+
+
+def test_dashboard_json_uses_default_layout(dashboard_client) -> None:
+    client, _ = dashboard_client
+
+    response = client.get("/dashboard.json?token=test-token")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["schema_version"] == 2
+    assert len(data["tiles"]) > 0
+    assert data["tiles"][0]["action"] in {"workflow.refresh", "alert.dismiss.test", "context.set"}
+
+
+def test_dashboard_png_focus_tile_query_param(dashboard_client) -> None:
+    import hashlib
+    client, _ = dashboard_client
+
+    resp1 = client.get("/dashboard.png?token=test-token&focus-tile=wf:refresh")
+    resp2 = client.get("/dashboard.png?token=test-token&focus-tile=alert:dismiss_test")
+
+    assert resp1.status_code == 200
+    assert resp2.status_code == 200
+
+    hash1 = hashlib.sha256(resp1.content).hexdigest()
+    hash2 = hashlib.sha256(resp2.content).hexdigest()
+    assert hash1 != hash2
+
+
+def test_app_custom_layout_override() -> None:
+    custom_layout = {
+        "columns": 2,
+        "rows": 2,
+        "tiles": [
+            {
+                "id": "custom:1",
+                "label": "Custom Tile",
+                "col": 0,
+                "row": 0,
+                "w": 1,
+                "h": 1,
+                "kind": "action",
+                "action": "workflow.custom",
+            }
+        ],
+    }
+    app = create_app(
+        settings=ApiSettings(token="test-token"),
+        aggregators=[],
+        layout=custom_layout,
+    )
+    with TestClient(app) as client:
+        res = client.get("/dashboard.json?token=test-token")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["layout"]["columns"] == 2
+        assert len(data["tiles"]) == 1
+        assert data["tiles"][0]["id"] == "custom:1"
+
+
+

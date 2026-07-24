@@ -18,9 +18,11 @@ from urllib.parse import parse_qs, urlparse
 
 import uvicorn
 
+from .actions import ActionRegistry
 from .aggregators.hermes import HermesAggregator
 from .api import ApiSettings, create_app
 from .render import RenderOptions, render_dashboard
+from .scheduler import ControlBus
 from .state import DashboardConfig, DashboardSnapshot, HermesStateCollector
 
 LOGGER = logging.getLogger("hermes-kindle-dashboard")
@@ -172,6 +174,81 @@ def _positive_float(value: str) -> float:
     return parsed
 
 
+def _parse_yaml_val(val: str) -> Any:
+    val = val.strip("\"'")
+    if not val:
+        return None
+    if val.startswith("[") and val.endswith("]"):
+        items = val[1:-1].split(",")
+        return [_parse_yaml_val(x.strip()) for x in items if x.strip()]
+    if "," in val:
+        items = val.split(",")
+        parsed = [_parse_yaml_val(x.strip()) for x in items if x.strip()]
+        if all(isinstance(x, (int, float)) for x in parsed):
+            return parsed
+    try:
+        return int(val)
+    except ValueError:
+        pass
+    try:
+        return float(val)
+    except ValueError:
+        pass
+    if val.lower() == "true":
+        return True
+    if val.lower() == "false":
+        return False
+    return val
+
+
+def parse_layout_yaml(content: str) -> dict[str, Any]:
+    layout: dict[str, Any] = {}
+    tiles: list[dict[str, Any]] = []
+    current_tile: dict[str, Any] | None = None
+    in_tiles = False
+
+    for raw_line in content.splitlines():
+        if "#" in raw_line:
+            raw_line = raw_line.split("#", 1)[0]
+        line = raw_line.rstrip()
+        if not line.strip():
+            continue
+
+        indent = len(line) - len(line.lstrip())
+        stripped = line.strip()
+
+        if stripped == "tiles:":
+            in_tiles = True
+            continue
+
+        if in_tiles:
+            if stripped.startswith("- "):
+                if current_tile:
+                    tiles.append(current_tile)
+                current_tile = {}
+                item = stripped[2:].strip()
+                if ":" in item:
+                    k, v = item.split(":", 1)
+                    current_tile[k.strip()] = _parse_yaml_val(v.strip())
+            elif indent > 0 and current_tile is not None and ":" in stripped:
+                k, v = stripped.split(":", 1)
+                current_tile[k.strip("- ").strip()] = _parse_yaml_val(v.strip())
+            elif indent == 0 and not stripped.startswith("-"):
+                in_tiles = False
+
+        if not in_tiles and ":" in stripped:
+            k, v = stripped.split(":", 1)
+            layout[k.strip()] = _parse_yaml_val(v.strip())
+
+    if current_tile:
+        tiles.append(current_tile)
+
+    if tiles:
+        layout["tiles"] = tiles
+
+    return layout
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Serve device-neutral Hermes data for E-Ink dashboards")
     parser.add_argument("--host", default=os.getenv("HERMES_DASHBOARD_HOST", "127.0.0.1"))
@@ -196,6 +273,13 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path(os.getenv("HERMES_DASHBOARD_TOKEN_FILE", "~/.config/hermes-kindle-dashboard/token")).expanduser(),
     )
+    parser.add_argument("--control-token", default=os.getenv("HERMES_DASHBOARD_CONTROL_TOKEN", ""))
+    parser.add_argument(
+        "--control-token-file",
+        type=Path,
+        default=Path(os.getenv("HERMES_DASHBOARD_CONTROL_TOKEN_FILE", "~/.config/hermes-kindle-dashboard/control_token")).expanduser(),
+    )
+    parser.add_argument("--layout-yaml", type=Path, help="path to layout YAML file to override default layout")
     parser.add_argument("--insecure", action="store_true", help="allow unauthenticated access")
     parser.add_argument("--render-once", type=Path, help="write one PNG and exit")
     parser.add_argument("--verbose", action="store_true")
@@ -210,6 +294,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     config = DashboardConfig.from_home(args.hermes_home, context_limit=args.context_limit)
     collector = HermesStateCollector(config)
+
+    layout_override = None
+    if args.layout_yaml and args.layout_yaml.exists():
+        layout_override = parse_layout_yaml(args.layout_yaml.read_text(encoding="utf-8"))
+
     if args.render_once:
         app = DashboardApplication(
             collector,
@@ -227,19 +316,33 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     token = _load_token(args.token, args.token_file, args.insecure)
+    control_token = ""
+    if args.control_token or (args.control_token_file and args.control_token_file.exists()):
+        control_token = _load_token(args.control_token, args.control_token_file, insecure=True)
+    if not control_token:
+        control_token = token
+
+    bus = ControlBus()
+    registry = ActionRegistry()
     app = create_app(
         ApiSettings(
             token=token,
+            control_token=control_token,
             width=args.width,
             height=args.height,
             bit_depth=args.bit_depth,
         ),
         [HermesAggregator(collector=collector, interval_seconds=args.refresh_seconds)],
+        bus=bus,
+        registry=registry,
+        layout=layout_override,
     )
     LOGGER.info("serving on http://%s:%d", args.host, args.port)
     # Access logging is disabled because legacy Kindle requests may contain a query token.
     uvicorn.run(app, host=args.host, port=args.port, access_log=False)
     return 0
+
+
 
 
 if __name__ == "__main__":

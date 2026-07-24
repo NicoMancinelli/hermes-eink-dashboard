@@ -99,3 +99,65 @@ def test_panel_names_must_be_safe_identifiers() -> None:
         assert str(error) == "invalid panel name"
     else:
         raise AssertionError("unsafe panel name accepted")
+
+
+def test_tile_dataclass_to_dict_and_from_dict() -> None:
+    from hermes_kindle_dashboard.contract import Tile
+
+    tile = Tile(
+        id="wf:briefing",
+        label="Morning Briefing",
+        col=0,
+        row=0,
+        w=2,
+        h=1,
+        kind="action",
+        action="workflow.briefing",
+        state="idle",
+    )
+    d = tile.to_dict()
+    assert d == {
+        "id": "wf:briefing",
+        "label": "Morning Briefing",
+        "col": 0,
+        "row": 0,
+        "w": 2,
+        "h": 1,
+        "kind": "action",
+        "action": "workflow.briefing",
+        "state": "idle",
+    }
+    reconstructed = Tile.from_dict(d)
+    assert reconstructed == tile
+
+
+def test_dashboard_json_returns_schema_v2_payload() -> None:
+    from hermes_kindle_dashboard.contract import Tile, dashboard_json
+
+    layout = {
+        "columns": 4,
+        "rows": 6,
+        "tile_size": [240, 160],
+        "grid_size": [1072, 1448],
+        "tiles": [
+            Tile(
+                id="wf:briefing",
+                label="Morning Briefing",
+                col=0,
+                row=0,
+                w=2,
+                h=1,
+                kind="action",
+                action="workflow.briefing",
+                state="idle",
+            )
+        ],
+    }
+    res = dashboard_json(layout)
+    assert res["schema_version"] == 2
+    assert res["layout"]["columns"] == 4
+    assert res["layout"]["rows"] == 6
+    assert len(res["tiles"]) == 1
+    assert res["tiles"][0]["id"] == "wf:briefing"
+    assert res["focus"] == {"tile_id": "wf:briefing", "x": 0, "y": 0}
+

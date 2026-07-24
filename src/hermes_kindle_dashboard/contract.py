@@ -107,3 +107,153 @@ class PanelCache:
             "generated_at": self._timestamp(),
             "panels": panels,
         }
+
+
+@dataclass(frozen=True)
+class Tile:
+    id: str
+    label: str
+    col: int
+    row: int
+    w: int = 1
+    h: int = 1
+    kind: str = "action"
+    action: str | None = None
+    state: str | None = None
+    panel: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "id": self.id,
+            "label": self.label,
+            "col": self.col,
+            "row": self.row,
+            "w": self.w,
+            "h": self.h,
+            "kind": self.kind,
+        }
+        if self.action is not None:
+            data["action"] = self.action
+        if self.state is not None:
+            data["state"] = self.state
+        if self.panel is not None:
+            data["panel"] = self.panel
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Tile:
+        return cls(
+            id=data["id"],
+            label=data["label"],
+            col=data["col"],
+            row=data["row"],
+            w=data.get("w", 1),
+            h=data.get("h", 1),
+            kind=data.get("kind", "action"),
+            action=data.get("action"),
+            state=data.get("state"),
+            panel=data.get("panel"),
+        )
+
+
+def dashboard_json(
+    layout: dict[str, Any] | None = None,
+    focus_tile_id: str | None = None,
+) -> dict[str, Any]:
+    if layout is None:
+        layout = {}
+    cols = layout.get("columns", 4)
+    rows = layout.get("rows", 6)
+    tile_size = layout.get("tile_size", [240, 160])
+    grid_size = layout.get("grid_size", [1072, 1448])
+
+    raw_tiles = layout.get("tiles", [])
+    tiles: list[dict[str, Any]] = []
+    tile_objs: list[Tile] = []
+    for item in raw_tiles:
+        if isinstance(item, Tile):
+            tile_objs.append(item)
+            tiles.append(item.to_dict())
+        elif isinstance(item, dict):
+            tile_objs.append(Tile.from_dict(item))
+            tiles.append(item)
+
+    focus_dict = None
+    target_id = focus_tile_id or (layout.get("focus", {}).get("tile_id") if isinstance(layout.get("focus"), dict) else None)
+    if target_id:
+        for t in tile_objs:
+            if t.id == target_id:
+                focus_dict = {"tile_id": t.id, "x": t.col, "y": t.row}
+                break
+    if focus_dict is None and tile_objs:
+        first = tile_objs[0]
+        focus_dict = {"tile_id": first.id, "x": first.col, "y": first.row}
+
+    return {
+        "schema_version": 2,
+        "layout": {
+            "columns": cols,
+            "rows": rows,
+            "tile_size": tile_size,
+            "grid_size": grid_size,
+        },
+        "tiles": tiles,
+        "focus": focus_dict,
+    }
+
+
+def build_default_layout(
+    width: int = 1072,
+    height: int = 1448,
+    panels: tuple[str, ...] = ("hermes",),
+) -> dict[str, Any]:
+    cols = 4
+    rows = 6
+    placeholders = (
+        ("wf:refresh", "Refresh", "workflow.refresh"),
+        ("alert:dismiss_test", "Dismiss Test", "alert.dismiss.test"),
+        ("context:set", "Set Context", "context.set"),
+    )
+    tiles: list[Tile] = []
+    for r in range(4):
+        for c in range(cols):
+            idx = r * cols + c
+            base_id, label, action = placeholders[idx % len(placeholders)]
+            tile_id = base_id if idx < len(placeholders) else f"{base_id}_{idx}"
+            tiles.append(
+                Tile(
+                    id=tile_id,
+                    label=label,
+                    col=c,
+                    row=r,
+                    w=1,
+                    h=1,
+                    kind="action",
+                    action=action,
+                )
+            )
+
+    if "hermes" in panels:
+        tiles.append(
+            Tile(
+                id="panel:hermes",
+                label="Hermes",
+                col=0,
+                row=4,
+                w=4,
+                h=2,
+                kind="panel",
+                panel="hermes",
+            )
+        )
+
+    layout_spec = {
+        "columns": cols,
+        "rows": rows,
+        "tile_size": [width // cols, height // rows],
+        "grid_size": [width, height],
+        "tiles": tiles,
+    }
+    return dashboard_json(layout_spec)
+
+
