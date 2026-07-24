@@ -114,3 +114,106 @@ def test_control_events_endpoint_long_poll(api_setup) -> None:
     resp = client.get("/control/events?timeout=1.0", headers=headers)
     assert resp.status_code == 200
     assert resp.json() == {"event": {"tile_id": "t1", "action": "refresh"}}
+
+
+def test_control_unset_control_token_returns_503() -> None:
+    settings = ApiSettings(token="read-token-123", control_token="")
+    app = create_app(settings=settings, aggregators=[])
+    client = TestClient(app)
+
+    resp = client.post(
+        "/control",
+        headers={"Authorization": "Bearer read-token-123"},
+        json={"action": "refresh", "tile_id": "t1", "nonce": "n1", "ts": time.time()},
+    )
+    assert resp.status_code == 503
+
+    resp_events = client.get(
+        "/control/events",
+        headers={"Authorization": "Bearer read-token-123"},
+    )
+    assert resp_events.status_code == 503
+
+
+def test_control_sanitized_error_messages(api_setup) -> None:
+    client, _, registry, _ = api_setup
+    headers = {"Authorization": "Bearer control-token-456"}
+    now = time.time()
+
+    user_nonce = "internal_nonce_secret_123"
+
+    # Unknown action -> 403 forbidden
+    resp = client.post(
+        "/control",
+        headers=headers,
+        json={"action": "unknown.internal.action", "tile_id": "t1", "nonce": user_nonce, "ts": now},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "forbidden"
+    assert "unknown.internal.action" not in resp.text
+    assert "internal" not in resp.text
+
+    # Bad timestamp -> 400 invalid_timestamp
+    resp = client.post(
+        "/control",
+        headers=headers,
+        json={"action": "refresh", "tile_id": "t1", "nonce": user_nonce, "ts": now + 1000.0},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "invalid_timestamp"
+
+    # Success first time
+    resp = client.post(
+        "/control",
+        headers=headers,
+        json={"action": "refresh", "tile_id": "t1", "nonce": user_nonce, "ts": now},
+    )
+    assert resp.status_code == 200
+
+    # Duplicate nonce -> 400 invalid_nonce
+    registry._default_rate_limit = 0
+    resp = client.post(
+        "/control",
+        headers=headers,
+        json={"action": "refresh", "tile_id": "t1", "nonce": user_nonce, "ts": now},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "invalid_nonce"
+    assert user_nonce not in resp.text
+
+    # Rate limit -> 429 rate_limited
+    registry._default_rate_limit = 10.0
+    resp = client.post(
+        "/control",
+        headers=headers,
+        json={"action": "workflow.briefing", "tile_id": "t1", "nonce": "n_rate", "ts": now},
+    )
+    assert resp.status_code == 200
+    resp = client.post(
+        "/control",
+        headers=headers,
+        json={"action": "workflow.briefing", "tile_id": "t1", "nonce": "n_rate_2", "ts": now},
+    )
+    assert resp.status_code == 429
+    assert resp.json()["detail"] == "rate_limited"
+
+    # Invalid payload -> 400 invalid_payload
+    resp = client.post(
+        "/control",
+        headers={"Authorization": "Bearer control-token-456", "Content-Type": "application/json"},
+        content="internal_invalid_json_payload",
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "invalid_payload"
+    assert "internal" not in resp.text
+
+
+def test_security_headers_present_on_all_endpoints(api_setup) -> None:
+    client, _, _, _ = api_setup
+    endpoints = ["/healthz", "/dashboard-data", "/dashboard.json", "/dashboard.png"]
+    for ep in endpoints:
+        resp = client.get(ep)
+        assert resp.headers.get("Cache-Control") == "no-store"
+        assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+        assert resp.headers.get("X-Frame-Options") == "DENY"
+

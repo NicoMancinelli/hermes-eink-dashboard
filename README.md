@@ -255,6 +255,13 @@ The Kindle interactive client (5-way + touch) lands in Phase 3. The legacy read-
 - Provider failures return stable error codes, not exception text or upstream responses.
 - Generated KUAL ZIPs contain the token: keep `dist/` private.
 
+### Interactive Controls Security
+
+- **Dual-Token Model**: Read endpoints use the read token (`--token`), while write/control endpoints (`POST /control`, `GET /control/events`) require a separate control token (`--control-token`). When `control_token` is empty/unset, control endpoints return `503 Service Unavailable` rather than degrading to the read token.
+- **Action Allowlist & Prefix Matching**: Only registered actions matching the allowlist (or allowlist prefix rules like `alert.dismiss.*` or `context.set.*`) are accepted.
+- **Replay Protection & Rate Limits**: `POST /control` enforces a 60s TTL nonce deduplication window, server timestamp validation (±30s), and per-action rate limiting (default 1/s).
+- **Hardened Error Handling & Input Limits**: 400/403/429 error responses return stable generic codes (`invalid_timestamp`, `invalid_nonce`, `invalid_payload`, `forbidden`, `rate_limited`) without reflecting user bytes or internal exception strings. Action configuration (`actions.yaml`) is capped at 1MB to prevent parser DoS. Security headers (`Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`) are enforced across all endpoints.
+
 ## Packaging and extension
 
 The package has no dependency on this repository's checkout after installation. `install_host.sh` creates an isolated virtual environment and generic private configuration under XDG directories. Other Hermes users can install it on the same Linux account that runs Hermes and select their own bind address, token, display size, context limit, and refresh interval.

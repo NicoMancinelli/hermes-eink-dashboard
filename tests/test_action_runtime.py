@@ -152,3 +152,23 @@ def test_default_refresh_handler_used_when_no_yaml_entry(tmp_path: Path):
     register_all_actions(registry, config_dir)
     res = registry.dispatch(action="workflow.refresh", ts=1000.0, now=1000.0)
     assert res["action"] == "workflow.refresh"
+
+
+def test_actions_yaml_size_limit_exceeded(tmp_path: Path, caplog: pytest.LogCaptureFixture):
+    caplog.set_level(logging.WARNING)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    actions_yaml = config_dir / "actions.yaml"
+    big_content = "valid_cmd: [\"echo\", \"ok\"]\n" + ("# " + "x" * 100 + "\n") * 10500
+    assert len(big_content.encode("utf-8")) > 1_048_576
+
+    actions_yaml.write_text(big_content, encoding="utf-8")
+
+    from hermes_kindle_dashboard.actions_runtime import load_action_config
+    res = load_action_config(actions_yaml)
+    assert res == {}
+    assert "exceeds maximum allowed size of 1MB" in caplog.text
+
+    res2 = parse_action_config(big_content)
+    assert res2 == {}
+

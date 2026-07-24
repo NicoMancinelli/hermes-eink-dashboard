@@ -320,8 +320,9 @@ def main(argv: list[str] | None = None) -> int:
     control_token = ""
     if args.control_token or (args.control_token_file and args.control_token_file.exists()):
         control_token = _load_token(args.control_token, args.control_token_file, insecure=True)
-    if not control_token:
-        control_token = token
+    # If no control token is configured, we leave it empty. The /control endpoints
+    # return 503 Service Unavailable in that case, which is the secure default:
+    # the read token is never silently granted write access.
 
     bus = ControlBus()
     registry = ActionRegistry()

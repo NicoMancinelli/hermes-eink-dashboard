@@ -31,6 +31,9 @@ from .contract import PanelCache
 LOGGER = logging.getLogger("hermes-kindle-dashboard.actions_runtime")
 
 
+MAX_ACTION_CONFIG_SIZE_BYTES = 1_048_576  # 1MB
+
+
 def parse_action_config(content: str, logger: logging.Logger | None = None) -> dict[str, list[str]]:
     """Parse a YAML-ish workflow config file. No PyYAML dependency.
 
@@ -38,6 +41,9 @@ def parse_action_config(content: str, logger: logging.Logger | None = None) -> d
     lines are logged and skipped.
     """
     log = logger or LOGGER
+    if len(content.encode("utf-8")) > MAX_ACTION_CONFIG_SIZE_BYTES:
+        log.warning("Action config exceeds maximum allowed size of 1MB (%d bytes)", len(content.encode("utf-8")))
+        return {}
     result: dict[str, list[str]] = {}
     for line_num, raw_line in enumerate(content.splitlines(), start=1):
         line = raw_line.strip()
@@ -67,6 +73,10 @@ def parse_action_config(content: str, logger: logging.Logger | None = None) -> d
 def load_action_config(filepath: Path | str, logger: logging.Logger | None = None) -> dict[str, list[str]]:
     path = Path(filepath)
     if not path.exists():
+        return {}
+    log = logger or LOGGER
+    if path.stat().st_size > MAX_ACTION_CONFIG_SIZE_BYTES:
+        log.warning("Action config file %s exceeds maximum allowed size of 1MB (%d bytes)", path, path.stat().st_size)
         return {}
     return parse_action_config(path.read_text(encoding="utf-8"), logger=logger)
 

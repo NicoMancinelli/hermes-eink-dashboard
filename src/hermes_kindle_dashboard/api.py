@@ -51,8 +51,12 @@ def _require_auth(request: Request, settings: ApiSettings, *, allow_query: bool 
 
 
 def _require_control_auth(request: Request, settings: ApiSettings) -> None:
-    expected = settings.control_token or settings.token
-    if not _authorized(request, expected, allow_query=False):
+    if not settings.control_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="control service unavailable",
+        )
+    if not _authorized(request, settings.control_token, allow_query=False):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized")
 
 
@@ -126,6 +130,7 @@ def create_app(
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
         return response
 
     @app.get("/healthz")
@@ -194,16 +199,15 @@ def create_app(
         eff_layout = app.state.layout or build_default_layout(settings.width, settings.height)
         return JSONResponse(dashboard_json(eff_layout, focus_tile_id=target_focus))
 
-
     @app.post("/control")
     async def post_control(request: Request) -> JSONResponse:
         _require_control_auth(request, settings)
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid json")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
         if not isinstance(body, dict):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid body")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
 
         action = str(body.get("action", ""))
         tile_id = str(body.get("tile_id", ""))
@@ -212,14 +216,16 @@ def create_app(
 
         try:
             res = action_registry.dispatch(action=action, tile_id=tile_id, nonce=nonce, ts=ts)
-        except UnknownActionError as error:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error))
-        except RateLimitExceededError as error:
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(error))
-        except (InvalidTimestampError, InvalidNonceError, ValueError, TypeError) as error:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
-        except ActionError as error:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+        except UnknownActionError:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+        except RateLimitExceededError:
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="rate_limited")
+        except InvalidTimestampError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_timestamp")
+        except InvalidNonceError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_nonce")
+        except (ActionError, ValueError, TypeError):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
 
         control_bus.publish(res)
         return JSONResponse({"status": "ok", "action": action, "tile_id": tile_id})
