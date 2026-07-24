@@ -7,6 +7,7 @@ PORT="9120"
 WIDTH="1072"
 HEIGHT="1448"
 CONTEXT_LIMIT="262144"
+REFRESH_SECONDS="15"
 START_SERVICE="1"
 
 usage() {
@@ -17,6 +18,7 @@ Usage: scripts/install_host.sh [options]
   --width PIXELS        Dashboard width (default: 1072)
   --height PIXELS       Dashboard height (default: 1448)
   --context-limit N     Model context window (default: 262144)
+  --refresh-seconds N   Hermes refresh interval (default: 15)
   --no-start            Install without enabling the service
 EOF
 }
@@ -28,6 +30,7 @@ while [ "$#" -gt 0 ]; do
     --width) WIDTH="$2"; shift 2 ;;
     --height) HEIGHT="$2"; shift 2 ;;
     --context-limit) CONTEXT_LIMIT="$2"; shift 2 ;;
+    --refresh-seconds) REFRESH_SECONDS="$2"; shift 2 ;;
     --no-start) START_SERVICE="0"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -35,10 +38,11 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$BIND_HOST" in ""|*[!A-Za-z0-9._:-]*) echo "Bind address contains invalid characters" >&2; exit 2 ;; esac
-case "$PORT:$WIDTH:$HEIGHT:$CONTEXT_LIMIT" in *[!0-9:]*) echo "Numeric options contain invalid characters" >&2; exit 2 ;; esac
+case "$PORT:$WIDTH:$HEIGHT:$CONTEXT_LIMIT:$REFRESH_SECONDS" in *[!0-9:]*) echo "Numeric options contain invalid characters" >&2; exit 2 ;; esac
 if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then echo "Port must be between 1 and 65535" >&2; exit 2; fi
 if [ "$WIDTH" -lt 320 ] || [ "$HEIGHT" -lt 480 ]; then echo "Display must be at least 320x480" >&2; exit 2; fi
 if [ "$CONTEXT_LIMIT" -lt 1 ]; then echo "Context limit must be positive" >&2; exit 2; fi
+if [ "$REFRESH_SECONDS" -lt 1 ]; then echo "Refresh interval must be positive" >&2; exit 2; fi
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-kindle-dashboard"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/hermes-kindle-dashboard"
@@ -67,7 +71,7 @@ HERMES_DASHBOARD_WIDTH=$WIDTH
 HERMES_DASHBOARD_HEIGHT=$HEIGHT
 HERMES_DASHBOARD_BIT_DEPTH=1
 HERMES_DASHBOARD_CONTEXT_LIMIT=$CONTEXT_LIMIT
-HERMES_DASHBOARD_CACHE_SECONDS=10
+HERMES_DASHBOARD_REFRESH_SECONDS=$REFRESH_SECONDS
 HERMES_DASHBOARD_TOKEN_FILE=$TOKEN_FILE
 HERMES_HOME=$HOME/.hermes
 EOF
@@ -81,6 +85,7 @@ if [ "$START_SERVICE" = "1" ]; then
 fi
 
 echo "Host installed."
-echo "Endpoint: http://$BIND_HOST:$PORT/dashboard.png"
+echo "API: http://$BIND_HOST:$PORT/dashboard-data"
+echo "Kindle compatibility: http://$BIND_HOST:$PORT/dashboard.png"
 echo "Token: $TOKEN_FILE (not printed)"
 echo "Next: build the KUAL ZIP with scripts/build_kual_bundle.py --host <Kindle-reachable-host>"

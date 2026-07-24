@@ -31,9 +31,18 @@ def test_systemd_unit_uses_private_config_and_restart_policy() -> None:
     parser.read_string(unit)
     service = parser["Service"]
     assert service["EnvironmentFile"] == "%h/.config/hermes-kindle-dashboard/host.env"
+    assert service["Environment"] == "PYTHONPATH="
     assert "%h/.local/share/hermes-kindle-dashboard/venv/bin/hermes-kindle-dashboard" in service["ExecStart"]
     assert service["Restart"] == "on-failure"
     assert service["NoNewPrivileges"] == "true"
+
+
+def test_host_installer_configures_independent_refresh_interval() -> None:
+    installer = (ROOT / "scripts/install_host.sh").read_text()
+
+    assert "--refresh-seconds" in installer
+    assert "HERMES_DASHBOARD_REFRESH_SECONDS=$REFRESH_SECONDS" in installer
+    assert "HERMES_DASHBOARD_CACHE_SECONDS=" not in installer
 
 
 def test_bundle_builder_injects_host_and_token_only_into_zip(tmp_path: Path) -> None:

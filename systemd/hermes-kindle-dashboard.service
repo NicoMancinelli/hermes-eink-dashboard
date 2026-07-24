@@ -1,12 +1,13 @@
 [Unit]
-Description=Hermes E-Ink Kindle Dashboard
-Documentation=https://github.com/NicoMancinelli/hermes-kindle-dashboard
+Description=Hermes E-Ink Dashboard Gateway
+Documentation=https://github.com/NicoMancinelli/hermes-eink-dashboard
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 EnvironmentFile=%h/.config/hermes-kindle-dashboard/host.env
+Environment=PYTHONPATH=
 ExecStart=%h/.local/share/hermes-kindle-dashboard/venv/bin/hermes-kindle-dashboard
 Restart=on-failure
 RestartSec=5

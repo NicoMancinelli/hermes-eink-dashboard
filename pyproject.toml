@@ -4,12 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-kindle-dashboard"
-version = "0.1.0"
-description = "E-Ink Kindle dashboard for Hermes Agent"
+version = "0.2.0"
+description = "Local multi-device E-Ink dashboard gateway for Hermes Agent"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
-dependencies = ["Pillow>=10.0"]
+dependencies = [
+  "fastapi>=0.115",
+  "Pillow>=10.0",
+  "uvicorn>=0.30",
+]
 authors = [{name = "Nico Mancinelli"}]
 keywords = ["hermes-agent", "kindle", "eink", "kual", "fbink"]
 classifiers = [
@@ -21,11 +25,11 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/NicoMancinelli/hermes-kindle-dashboard"
-Issues = "https://github.com/NicoMancinelli/hermes-kindle-dashboard/issues"
+Homepage = "https://github.com/NicoMancinelli/hermes-eink-dashboard"
+Issues = "https://github.com/NicoMancinelli/hermes-eink-dashboard/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["httpx>=0.27", "pytest>=8.0"]
 
 [project.scripts]
 hermes-kindle-dashboard = "hermes_kindle_dashboard.server:main"

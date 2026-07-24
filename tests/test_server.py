@@ -1,74 +1,96 @@
 import json
-import threading
 from io import BytesIO
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
 
 import pytest
+from fastapi.testclient import TestClient
 from PIL import Image
 
-from hermes_kindle_dashboard.server import DashboardApplication, ServerSettings, create_server
+from hermes_kindle_dashboard.aggregators.hermes import snapshot_to_panel
+from hermes_kindle_dashboard.api import ApiSettings, create_app
+from hermes_kindle_dashboard.server import build_parser
 from test_render import sample_snapshot
 
 
-class FakeCollector:
+class FakeHermesAggregator:
+    name = "hermes"
+    interval_seconds = 3600.0
+
     def __init__(self):
         self.calls = 0
 
-    def collect(self):
+    async def collect(self):
         self.calls += 1
-        return sample_snapshot()
+        return snapshot_to_panel(sample_snapshot())
 
 
 @pytest.fixture
-def dashboard_server():
-    collector = FakeCollector()
-    app = DashboardApplication(
-        collector=collector,
-        settings=ServerSettings(token="test-token", width=600, height=800, cache_seconds=60),
+def dashboard_client():
+    aggregator = FakeHermesAggregator()
+    app = create_app(
+        settings=ApiSettings(token="test-token", width=600, height=800),
+        aggregators=[aggregator],
     )
-    server = create_server("127.0.0.1", 0, app)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    host, port = server.server_address
-    try:
-        yield f"http://{host}:{port}", collector
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=2)
+    with TestClient(app) as client:
+        yield client, aggregator
 
 
-def test_health_is_public(dashboard_server) -> None:
-    base, _ = dashboard_server
-    with urlopen(f"{base}/healthz", timeout=2) as response:
-        assert response.status == 200
-        assert json.load(response)["status"] == "ok"
+def test_health_is_public(dashboard_client) -> None:
+    client, _ = dashboard_client
+
+    response = client.get("/healthz")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
 
 
-def test_dashboard_requires_token_and_returns_png(dashboard_server) -> None:
-    base, collector = dashboard_server
-    with pytest.raises(HTTPError) as error:
-        urlopen(f"{base}/dashboard.png", timeout=2)
-    assert error.value.code == 401
+def test_dashboard_data_requires_bearer_auth(dashboard_client) -> None:
+    client, _ = dashboard_client
 
-    with urlopen(f"{base}/dashboard.png?token=test-token", timeout=2) as response:
-        body = response.read()
-        assert response.headers["Content-Type"] == "image/png"
-        assert response.headers["Cache-Control"] == "no-store"
+    assert client.get("/dashboard-data").status_code == 401
+    assert client.get("/dashboard-data?token=test-token").status_code == 401
 
-    image = Image.open(BytesIO(body))
+    response = client.get(
+        "/dashboard-data",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.json()["schema_version"] == 1
+    assert response.json()["panels"]["hermes"]["session"]["model"] == "gpt-5.6-sol"
+
+
+def test_legacy_routes_accept_query_token_without_recollecting(dashboard_client) -> None:
+    client, aggregator = dashboard_client
+
+    state_response = client.get("/state.json?token=test-token")
+    png_response = client.get("/dashboard.png?token=test-token")
+
+    assert state_response.status_code == 200
+    assert state_response.json()["session"]["model"] == "gpt-5.6-sol"
+    assert "secret" not in json.dumps(state_response.json()).lower()
+    assert png_response.status_code == 200
+    assert png_response.headers["Content-Type"] == "image/png"
+    assert png_response.headers["Cache-Control"] == "no-store"
+    image = Image.open(BytesIO(png_response.content))
     assert image.size == (600, 800)
     assert image.mode == "1"
-    assert collector.calls == 1
+    assert aggregator.calls == 1
 
 
-def test_state_supports_bearer_auth_and_never_returns_raw_tool_output(dashboard_server) -> None:
-    base, _ = dashboard_server
-    request = Request(f"{base}/state.json", headers={"Authorization": "Bearer test-token"})
-    with urlopen(request, timeout=2) as response:
-        state = json.load(response)
+def test_unknown_route_is_not_found(dashboard_client) -> None:
+    client, _ = dashboard_client
 
-    assert state["session"]["model"] == "gpt-5.6-sol"
-    assert "recent_events" in state
-    assert "secret" not in json.dumps(state).lower()
+    response = client.get("/unknown")
+
+    assert response.status_code == 404
+
+
+def test_cli_rejects_non_positive_refresh_interval(monkeypatch) -> None:
+    for value in ("0", "nan", "inf"):
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["--refresh-seconds", value])
+
+    monkeypatch.setenv("HERMES_DASHBOARD_REFRESH_SECONDS", "-1")
+    with pytest.raises(SystemExit):
+        build_parser().parse_args([])

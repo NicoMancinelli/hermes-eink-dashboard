@@ -1,6 +1,42 @@
-# Hermes Kindle Dashboard
+# Hermes E-Ink Dashboard
 
-A standalone, read-only E-Ink dashboard for [Hermes Agent](https://github.com/NousResearch/hermes-agent). A Linux host renders live Hermes state to a high-contrast PNG; a jailbroken Kindle fetches it and displays it through FBInk from a KUAL menu.
+A standalone, read-only local dashboard gateway for [Hermes Agent](https://github.com/NousResearch/hermes-agent). It runs beside Hermes, refreshes sanitized state independently of HTTP requests, and exposes a versioned JSON contract for device-side E-Ink renderers. The original Kindle PNG client remains available as a compatibility adapter.
+
+## One-liner install (Linux host)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NicoMancinelli/hermes-eink-dashboard/main/install.sh | bash
+```
+
+That's it. The installer:
+
+- Creates `~/.local/share/hermes-eink-dashboard/venv` and installs the package.
+- Generates a bearer token at `~/.config/hermes-eink-dashboard/token`.
+- Installs a hardened `systemd --user` service named `hermes-eink-dashboard`.
+- Starts the service on `127.0.0.1:9120` (override with `--bind` / `--port`).
+
+Common flags (pipe after `bash -s --`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NicoMancinelli/hermes-eink-dashboard/main/install.sh \
+  | bash -s -- --bind 192.168.1.42 --port 9120 --refresh-seconds 15
+```
+
+Verify with:
+
+```bash
+systemctl --user status hermes-eink-dashboard
+curl -fsSL http://127.0.0.1:9120/healthz
+```
+
+Then build the Kindle bundle and copy it to the device:
+
+```bash
+gh repo clone NicoMancinelli/hermes-eink-dashboard
+cd hermes-eink-dashboard
+python3 scripts/build_kual_bundle.py --host 192.168.1.42 --port 9120
+# Copy dist/hermes-dashboard-kual.zip to your Kindle and install via KUAL.
+```
 
 ## What it shows
 
@@ -16,20 +52,17 @@ The Kindle UI provides **Start Dashboard**, **Manual Refresh**, and **Stop Dashb
 
 ```mermaid
 flowchart LR
-  subgraph Host[Linux host]
-    H[Hermes Agent] -->|read-only SQLite + logs| C[State collector]
-    C --> R[Pillow 1-bit renderer]
-    R --> S[Token-protected HTTP server]
+  subgraph Host[Hermes host]
+    H[Hermes Agent] -->|read-only SQLite + logs| A[Hermes aggregator]
+    A -->|independent refresh loop| C[Atomic panel cache]
+    C --> J[GET /dashboard-data]
+    C --> L[Legacy PNG adapter]
   end
-  S -->|Wi-Fi / PNG every 45s| W[BusyBox wget]
-  subgraph Kindle[Jailbroken Kindle]
-    K[KUAL menu] --> F[POSIX fetch loop]
-    W --> F
-    F --> B[FBInk framebuffer]
-  end
+  J --> N[Native device renderers]
+  L -->|Wi-Fi / PNG every 45s| K[Kindle KUAL + FBInk]
 ```
 
-No Hermes source patch is required. The host service only reads `~/.hermes/state.db`, `kanban.db`, `memory_store.db`, memory markdown, and structured agent logs.
+No Hermes source patch is required. The service only reads `~/.hermes/state.db`, `kanban.db`, `memory_store.db`, memory markdown, and structured agent logs. API requests never trigger SQLite, log, or provider collection work.
 
 ## Repository layout
 
@@ -40,9 +73,13 @@ kindle/hermes_dashboard/     KUAL extension source
   config.sh.example
   bin/{start,fetch,refresh,stop}.sh
 src/hermes_kindle_dashboard/
+  aggregators/              independent panel providers
+  contract.py               versioned device-neutral panel cache
+  scheduler.py              serial refresh loops and backoff
   state.py                   read-only Hermes state collector
   render.py                  responsive E-Ink renderer
-  server.py                  stdlib HTTP service
+  api.py                     FastAPI service and compatibility routes
+  server.py                  CLI and Uvicorn entry point
 systemd/                     hardened user service
 scripts/
   install_host.sh            host installer
@@ -66,16 +103,19 @@ tests/                       collector, renderer, HTTP, and KUAL tests
 - [FBInk](https://github.com/NiLuJe/FBInk) installed as a KUAL extension or available in `PATH`
 - Wi-Fi access to the host
 
-## Install the host
+## Install from source (alternative)
+
+If you'd rather not pipe to bash, clone the repo and run the installer directly:
 
 ```sh
-git clone https://github.com/NicoMancinelli/hermes-kindle-dashboard.git
-cd hermes-kindle-dashboard
+git clone https://github.com/NicoMancinelli/hermes-eink-dashboard.git
+cd hermes-eink-dashboard
 
-# Safe default is 127.0.0.1. For a Kindle on your LAN, bind only to the
-# host's LAN address rather than 0.0.0.0.
+# The safe default is 127.0.0.1. For a Kindle on your LAN, bind only to
+# the Hermes host's LAN address rather than 0.0.0.0.
 ./scripts/install_host.sh --bind 192.168.1.50 --port 9120 \
-  --width 1072 --height 1448 --context-limit 262144
+  --width 1072 --height 1448 --context-limit 262144 \
+  --refresh-seconds 15
 ```
 
 The installer creates:
@@ -92,7 +132,9 @@ systemctl --user status hermes-kindle-dashboard
 curl -fsS http://192.168.1.50:9120/healthz
 TOKEN=$(cat ~/.config/hermes-kindle-dashboard/token)
 curl -fsS -H "Authorization: Bearer $TOKEN" \
-  http://192.168.1.50:9120/dashboard.png -o /tmp/hermes-dashboard.png
+  http://192.168.1.50:9120/dashboard-data -o /tmp/dashboard-data.json
+curl -fsS "http://192.168.1.50:9120/dashboard.png?token=$TOKEN" \
+  -o /tmp/hermes-dashboard.png
 file /tmp/hermes-dashboard.png
 ```
 
@@ -158,10 +200,34 @@ TOKEN=development-only
 | Endpoint | Auth | Response |
 |---|---|---|
 | `GET /healthz` | none | `{"status":"ok"}` |
-| `GET /dashboard.png` | bearer or `?token=` | E-Ink PNG |
-| `GET /state.json` | bearer or `?token=` | sanitized dashboard state |
+| `GET /dashboard-data` | bearer only | versioned device-neutral panel data |
+| `GET /dashboard.png` | bearer or `?token=` | deprecated Kindle-compatible E-Ink PNG |
+| `GET /state.json` | bearer or `?token=` | deprecated pre-v1 Hermes state |
 
-Bearer auth is preferred for normal clients. Query auth exists because BusyBox `wget` support varies across Kindle firmware. Request paths are deliberately omitted from server logs so query tokens are not logged.
+`/dashboard-data` is the permanent renderer interface. Each panel carries `_meta.status`, `updated_at`, `last_attempt_at`, and a sanitized `error_code`. A failed refresh retains the last successful data with status `stale`; a panel with no successful data is `unavailable`. Clients must ignore unknown fields and reject unsupported `schema_version` values.
+
+```json
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-24T19:00:00+00:00",
+  "panels": {
+    "hermes": {
+      "_meta": {
+        "status": "ok",
+        "updated_at": "2026-07-24T19:00:00+00:00",
+        "last_attempt_at": "2026-07-24T19:00:00+00:00",
+        "error_code": null
+      },
+      "session": {},
+      "tasks": [],
+      "memory": {},
+      "recent_events": []
+    }
+  }
+}
+```
+
+Query auth is restricted to the deprecated routes because BusyBox `wget` header support varies across Kindle firmware. Uvicorn access logging is disabled so those query tokens are not logged.
 
 ## Security and privacy
 
@@ -170,7 +236,14 @@ Bearer auth is preferred for normal clients. Query auth exists because BusyBox `
 - Raw message bodies, terminal output, and tool results are not emitted.
 - Agent log parsing uses a small allowlist of structured tool/API events.
 - The state collector opens SQLite read-only and sets `PRAGMA query_only=ON`.
+- Provider failures return stable error codes, not exception text or upstream responses.
 - Generated KUAL ZIPs contain the token: keep `dist/` private.
+
+## Packaging and extension
+
+The package has no dependency on this repository's checkout after installation. `install_host.sh` creates an isolated virtual environment and generic private configuration under XDG directories. Other Hermes users can install it on the same Linux account that runs Hermes and select their own bind address, token, display size, context limit, and refresh interval.
+
+New devices should consume `/dashboard-data` and render locally. New data sources implement the small async aggregator protocol and receive their own refresh loop and cache metadata; they must not add provider calls to request handlers. The server-rendered PNG route remains only until the existing Kindle client is replaced.
 
 See [SECURITY.md](SECURITY.md) for reporting and deployment guidance.
 

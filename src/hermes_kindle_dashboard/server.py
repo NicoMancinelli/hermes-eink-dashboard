@@ -4,6 +4,7 @@ import argparse
 import hmac
 import json
 import logging
+import math
 import os
 import threading
 import time
@@ -15,6 +16,10 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import parse_qs, urlparse
 
+import uvicorn
+
+from .aggregators.hermes import HermesAggregator
+from .api import ApiSettings, create_app
 from .render import RenderOptions, render_dashboard
 from .state import DashboardConfig, DashboardSnapshot, HermesStateCollector
 
@@ -157,15 +162,33 @@ def _load_token(token: str, token_file: Path | None, insecure: bool) -> str:
     return value
 
 
+def _positive_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be a number") from error
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a finite number greater than zero")
+    return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Serve a Hermes status dashboard for an E-Ink Kindle")
+    parser = argparse.ArgumentParser(description="Serve device-neutral Hermes data for E-Ink dashboards")
     parser.add_argument("--host", default=os.getenv("HERMES_DASHBOARD_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("HERMES_DASHBOARD_PORT", "9120")))
     parser.add_argument("--width", type=int, default=int(os.getenv("HERMES_DASHBOARD_WIDTH", "1072")))
     parser.add_argument("--height", type=int, default=int(os.getenv("HERMES_DASHBOARD_HEIGHT", "1448")))
     parser.add_argument("--bit-depth", type=int, choices=(1, 8), default=int(os.getenv("HERMES_DASHBOARD_BIT_DEPTH", "1")))
     parser.add_argument("--context-limit", type=int, default=int(os.getenv("HERMES_DASHBOARD_CONTEXT_LIMIT", "262144")))
-    parser.add_argument("--cache-seconds", type=float, default=float(os.getenv("HERMES_DASHBOARD_CACHE_SECONDS", "10")))
+    parser.add_argument(
+        "--refresh-seconds",
+        type=_positive_float,
+        default=os.getenv(
+            "HERMES_DASHBOARD_REFRESH_SECONDS",
+            os.getenv("HERMES_DASHBOARD_CACHE_SECONDS", "15"),
+        ),
+        help="seconds between local Hermes collection runs",
+    )
     parser.add_argument("--hermes-home", type=Path, default=Path(os.getenv("HERMES_HOME", "~/.hermes")).expanduser())
     parser.add_argument("--token", default=os.getenv("HERMES_DASHBOARD_TOKEN", ""))
     parser.add_argument(
@@ -187,28 +210,35 @@ def main(argv: list[str] | None = None) -> int:
     )
     config = DashboardConfig.from_home(args.hermes_home, context_limit=args.context_limit)
     collector = HermesStateCollector(config)
-    settings = ServerSettings(
-        token=_load_token(args.token, args.token_file, args.insecure or bool(args.render_once)),
-        width=args.width,
-        height=args.height,
-        bit_depth=args.bit_depth,
-        cache_seconds=args.cache_seconds,
-    )
-    app = DashboardApplication(collector, settings)
     if args.render_once:
+        app = DashboardApplication(
+            collector,
+            ServerSettings(
+                token="",
+                width=args.width,
+                height=args.height,
+                bit_depth=args.bit_depth,
+                cache_seconds=args.refresh_seconds,
+            ),
+        )
         args.render_once.parent.mkdir(parents=True, exist_ok=True)
         args.render_once.write_bytes(app.png())
         LOGGER.info("wrote %s", args.render_once)
         return 0
 
-    server = create_server(args.host, args.port, app)
+    token = _load_token(args.token, args.token_file, args.insecure)
+    app = create_app(
+        ApiSettings(
+            token=token,
+            width=args.width,
+            height=args.height,
+            bit_depth=args.bit_depth,
+        ),
+        [HermesAggregator(collector=collector, interval_seconds=args.refresh_seconds)],
+    )
     LOGGER.info("serving on http://%s:%d", args.host, args.port)
-    try:
-        server.serve_forever(poll_interval=0.5)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
+    # Access logging is disabled because legacy Kindle requests may contain a query token.
+    uvicorn.run(app, host=args.host, port=args.port, access_log=False)
     return 0
 
 

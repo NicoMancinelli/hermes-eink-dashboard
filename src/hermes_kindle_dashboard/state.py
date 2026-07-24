@@ -6,7 +6,7 @@ import sqlite3
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable, Mapping
 
 
 @dataclass(frozen=True)
@@ -80,6 +80,27 @@ class DashboardSnapshot:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    @classmethod
+    def from_panel(cls, panel: Mapping[str, Any], generated_at: str) -> "DashboardSnapshot":
+        """Reconstruct the legacy snapshot consumed by the PNG renderer."""
+
+        session = panel.get("session", {})
+        memory = panel.get("memory", {})
+        tasks = panel.get("tasks", ())
+        events = panel.get("recent_events", ())
+        if not isinstance(session, Mapping) or not isinstance(memory, Mapping):
+            raise ValueError("invalid Hermes panel")
+        if not isinstance(tasks, (list, tuple)) or not isinstance(events, (list, tuple)):
+            raise ValueError("invalid Hermes panel")
+        return cls(
+            generated_at=generated_at,
+            session=SessionState(**dict(session)),
+            tasks=tuple(TaskState(**dict(task)) for task in tasks if isinstance(task, Mapping)),
+            kanban_active=int(panel.get("kanban_active", 0)),
+            memory=MemoryState(**dict(memory)),
+            recent_events=tuple(str(event) for event in events),
+        )
 
 
 class HermesStateCollector:
