@@ -1,9 +1,27 @@
 #!/usr/bin/env python3
-"""Build a ready-to-copy KUAL extension without modifying tracked sources.
+"""Build KUAL extension ZIPs for the Hermes E-Ink Dashboard.
 
-The bundle embeds the host address, read token, and (optionally) control token.
-The resulting ZIP is intended to be copied to the Kindle's
-`/mnt/us/extensions/hermes_dashboard/` directory and installed via KUAL.
+Two build modes are supported:
+
+1. **Template mode** (default): produces a bundle with placeholder tokens
+   (HOST_IP=PLACEHOLDER, DASHBOARD_TOKEN=PLACEHOLDER). Safe to publish as
+   a release asset — anyone can download, unzip, and configure via the
+   post-install flow on the Kindle.
+
+2. **Personal mode** (``--inject-tokens``): embeds the user's real tokens
+   from ``~/.config/hermes-kindle-dashboard/{token,control_token}``. Use
+   this to produce a per-host bundle. Never publish this artifact.
+
+The bundle layout:
+
+    hermes_dashboard/
+        config.sh        # generated from config.sh.example
+        config.sh.example
+        config.xml
+        menu.json
+        bin/             # fetch.sh, refresh.sh, start.sh, stop.sh
+
+The bundle is unpacked on the Kindle at ``/mnt/us/extensions/hermes_dashboard/``.
 """
 from __future__ import annotations
 
@@ -12,7 +30,6 @@ import hashlib
 import json
 import re
 import shutil
-import sys
 import tempfile
 import zipfile
 from pathlib import Path
@@ -22,33 +39,38 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "kindle" / "hermes_dashboard"
 SAFE_HOST = re.compile(r"^[A-Za-z0-9._:-]+$")
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9._~-]+$")
+PLACEHOLDER_HOST = "PLACEHOLDER.lan"
+PLACEHOLDER_TOKEN = "PLACEHOLDER_TOKEN"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", required=True, help="LAN or tailnet address reachable by the Kindle")
+    parser.add_argument("--host", default=PLACEHOLDER_HOST, help="host (placeholder by default)")
     parser.add_argument("--port", type=int, default=9120)
+    parser.add_argument(
+        "--inject-tokens",
+        action="store_true",
+        help="embed real tokens from --token-file / --control-token-file (do not publish this build)",
+    )
     parser.add_argument(
         "--token-file",
         type=Path,
         default=Path("~/.config/hermes-kindle-dashboard/token").expanduser(),
-        help="Path to the read token file",
     )
     parser.add_argument(
         "--control-token-file",
         type=Path,
         default=Path("~/.config/hermes-kindle-dashboard/control_token").expanduser(),
-        help="Path to the control token file (optional; skip if interactive controls are disabled)",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "dist" / "hermes-dashboard-kual-v0.3.0.zip",
+        default=ROOT / "dist" / "hermes-dashboard-kual-v0.4.0.zip",
     )
     parser.add_argument(
         "--no-control-token",
         action="store_true",
-        help="Disable the control token even if the file exists (write endpoints will return 503)",
+        help="omit the control token even in personal builds (disables /control endpoints)",
     )
     return parser.parse_args()
 
@@ -64,8 +86,9 @@ def _read_token(path: Path, label: str) -> str:
 
 
 def _validate_host(host: str) -> str:
-    if not SAFE_HOST.fullmatch(host):
-        raise SystemExit("host may contain only letters, numbers, dots, colons, underscores, and hyphens")
+    if host == PLACEHOLDER_HOST or not SAFE_HOST.fullmatch(host):
+        if host != PLACEHOLDER_HOST:
+            raise SystemExit("host may contain only letters, numbers, dots, colons, underscores, and hyphens")
     return host
 
 
@@ -82,28 +105,33 @@ def _token_prefix(token: str) -> str:
 def build(
     host: str,
     port: int,
+    inject_tokens: bool,
     token_file: Path,
     control_token_file: Path | None,
-    output: Path,
     include_control_token: bool,
+    output: Path,
 ) -> tuple[Path, dict]:
     host = _validate_host(host)
     port = _validate_port(port)
 
-    read_token = _read_token(token_file, "read token")
-
-    control_token = ""
-    if include_control_token and control_token_file is not None:
-        expanded = control_token_file.expanduser()
-        if expanded.exists():
-            control_token = _read_token(expanded, "control token")
+    if inject_tokens:
+        read_token = _read_token(token_file, "read token")
+        control_token = ""
+        if include_control_token and control_token_file is not None:
+            expanded = control_token_file.expanduser()
+            if expanded.exists():
+                control_token = _read_token(expanded, "control token")
+    else:
+        read_token = PLACEHOLDER_TOKEN
+        control_token = ""
 
     metadata = {
         "schema_version": 1,
+        "mode": "personal" if inject_tokens else "template",
         "host": host,
         "port": port,
-        "read_token_set": True,
-        "control_token_set": bool(control_token),
+        "tokens_embedded": inject_tokens,
+        "control_token_embedded": bool(control_token),
         "read_token_sha256_prefix": _token_prefix(read_token),
     }
     if control_token:
@@ -138,10 +166,11 @@ def main() -> int:
     output, metadata = build(
         host=args.host,
         port=args.port,
+        inject_tokens=args.inject_tokens,
         token_file=args.token_file,
         control_token_file=args.control_token_file if not args.no_control_token else None,
-        output=args.output,
         include_control_token=not args.no_control_token,
+        output=args.output,
     )
     print(json.dumps({"path": str(output), **metadata}, indent=2))
     return 0

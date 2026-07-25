@@ -21,7 +21,6 @@ from .actions import (
 )
 from collections.abc import Callable
 from .aggregators.base import Aggregator
-from .config import ConfigManager
 from .config import ConfigManager, ConfigSchema
 from .contract import PanelCache, build_default_layout, dashboard_json
 from .render import RenderOptions, render_dashboard, render_layout_dashboard

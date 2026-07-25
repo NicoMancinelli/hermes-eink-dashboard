@@ -28,6 +28,7 @@ import struct
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Protocol
@@ -36,13 +37,32 @@ from typing import Protocol
 LOGGER = logging.getLogger("hermes-kindle-dashboard.client")
 
 
+# Linux input event types and key/axis codes (see /usr/include/linux/input-event-codes.h).
+EV_KEY = 0x01
+EV_ABS = 0x03
+ABS_X = 0x00
+ABS_Y = 0x01
+ABS_MT_POSITION_X = 0x35
+ABS_MT_POSITION_Y = 0x36
+BTN_TOUCH = 0x14A  # 330
+# Single-touch protocol A gives screen-space coordinates in ABS_X/ABS_Y.
+# Multi-touch protocol B uses ABS_MT_POSITION_X/Y (more common on Voyage+).
+# Both are handled.
+
+
 @dataclass(frozen=True)
 class InputEvent:
-    """A normalized input event from any source (5-way, touch, mock)."""
+    """A normalized input event from any source (5-way, touch, mock).
 
-    kind: str  # "focus" or "activate"
-    tile_id: str | None = None  # populated for focus events; activate uses current focus
-    direction: str | None = None  # only for focus events: "up" | "down" | "left" | "right"
+    `kind` is "focus" or "activate". For tap-style focus events (touch),
+    `tile_id` is set directly so the client does not need to look up the
+    neighbor. For 5-way focus events, `direction` is set so the client uses
+    the layout's neighbor() helper.
+    """
+
+    kind: str
+    tile_id: str | None = None
+    direction: str | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +98,10 @@ class Layout:
 
     columns: int
     rows: int
+    grid_width: int
+    grid_height: int
+    tile_width: int
+    tile_height: int
     tiles: tuple[Tile, ...]
     focus_tile_id: str
 
@@ -86,9 +110,15 @@ class Layout:
         layout = data.get("layout", {})
         tiles = tuple(Tile.from_dict(t) for t in data.get("tiles", []))
         focus = data.get("focus", {})
+        grid_size = layout.get("grid_size", [1072, 1448])
+        tile_size = layout.get("tile_size", [grid_size[0] // max(1, int(layout.get("columns", 4))), grid_size[1] // max(1, int(layout.get("rows", 6)))])
         return cls(
             columns=int(layout.get("columns", 4)),
             rows=int(layout.get("rows", 6)),
+            grid_width=int(grid_size[0]),
+            grid_height=int(grid_size[1]),
+            tile_width=int(tile_size[0]),
+            tile_height=int(tile_size[1]),
             tiles=tiles,
             focus_tile_id=str(focus.get("tile_id", tiles[0].id if tiles else "")),
         )
@@ -127,6 +157,26 @@ class Layout:
         tcy = target.row + target.h / 2.0
         candidates.sort(key=lambda t: (tcx - (t.col + t.w / 2.0)) ** 2 + (tcy - (t.row + t.h / 2.0)) ** 2)
         return candidates[0].id
+
+    def tile_at(self, x: float, y: float) -> str | None:
+        """Return the tile id under (x, y) in layout coordinates, or None.
+
+        Layout coordinates match the host's `grid_size` (default 1072 x 1448).
+        Coordinates outside the grid are rejected. The first matching tile
+        wins.
+        """
+        for tile in self.tiles:
+            tile_left = tile.col * self.tile_width
+            tile_top = tile.row * self.tile_height
+            tile_right = tile_left + tile.w * self.tile_width
+            tile_bottom = tile_top + tile.h * self.tile_height
+            if tile_left <= x < tile_right and tile_top <= y < tile_bottom:
+                return tile.id
+        return None
+    """Protocol for input sources on the Kindle and in tests."""
+
+    def next_event(self, timeout: float) -> InputEvent | None:
+        """Return the next event, or None if timeout elapses with no input."""
 
 
 class InputSource(Protocol):
@@ -211,6 +261,118 @@ class FiveWaySource:
             os.close(fd)
 
 
+class TouchSource:
+    """Reads touchscreen events from a Linux input device.
+
+    Single-touch protocol A: ABS_X/ABS_Y carry screen-space coordinates
+    and BTN_TOUCH (value 1 = press, 0 = release) marks the press boundary.
+    Multi-touch protocol B (common on Voyage and later) uses
+    ABS_MT_POSITION_X/Y. We handle both.
+
+    The source emits raw-coordinate events tagged with ``__raw__:x:y``. The
+    client resolves those to tile ids via Layout.tile_at() so the Kindle
+    device pixel resolution can differ from the layout grid.
+    """
+
+    _EVENT_STRUCT = struct.Struct("llHHi")
+
+    def __init__(
+        self,
+        device: str = "/dev/input/event1",
+        device_size: tuple[int, int] | None = None,
+        layout_size: tuple[int, int] = (1072, 1448),
+    ) -> None:
+        self._device = device
+        self._device_size = device_size
+        self._layout_size = layout_size
+
+    def _scale(self, raw_x: int, raw_y: int) -> tuple[float, float]:
+        if self._device_size is None:
+            return float(raw_x), float(raw_y)
+        dx, dy = self._device_size
+        lx, ly = self._layout_size
+        return raw_x * lx / dx, raw_y * ly / dy
+
+    def next_event(self, timeout: float) -> InputEvent | None:
+        try:
+            fd = os.open(self._device, os.O_RDONLY | os.O_NONBLOCK)
+        except OSError as exc:
+            LOGGER.warning("touch device unavailable: %s (%s)", self._device, exc)
+            time.sleep(min(timeout, 1.0))
+            return None
+        try:
+            deadline = time.monotonic() + max(0.0, timeout)
+            pending_x: int | None = None
+            pending_y: int | None = None
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                rlist, _, _ = select.select([fd], [], [], remaining)
+                if not rlist:
+                    return None
+                try:
+                    data = os.read(fd, self._EVENT_STRUCT.size)
+                except BlockingIOError:
+                    continue
+                if len(data) < self._EVENT_STRUCT.size:
+                    continue
+                _, _, ev_type, code, value = self._EVENT_STRUCT.unpack(data)
+                if ev_type == EV_ABS:
+                    if code in (ABS_X, ABS_MT_POSITION_X):
+                        pending_x = value
+                    elif code in (ABS_Y, ABS_MT_POSITION_Y):
+                        pending_y = value
+                elif ev_type == EV_KEY and code == BTN_TOUCH:
+                    if pending_x is None or pending_y is None:
+                        return None
+                    sx, sy = self._scale(pending_x, pending_y)
+                    return InputEvent(kind="focus", tile_id=f"__raw__:{sx:.0f}:{sy:.0f}")
+        finally:
+            os.close(fd)
+
+
+class TapSource:
+    """Test helper that emits tap-style events from a list of (x, y) coords."""
+
+    def __init__(self, taps: list[tuple[float, float]]) -> None:
+        self._taps = iter(taps)
+
+    def next_event(self, timeout: float) -> InputEvent | None:
+        try:
+            x, y = next(self._taps)
+        except StopIteration:
+            return None
+        return InputEvent(kind="focus", tile_id=f"__raw__:{x:.0f}:{y:.0f}")
+
+
+class CombinedSource:
+    """Multiplexes multiple InputSource instances.
+
+    Polls each source in turn until one returns a non-None event. Used to
+    drive a Kindle with both a 5-way controller (event0) and a touchscreen
+    (event1) from a single DashboardClient.
+    """
+
+    def __init__(self, sources: list[InputSource]) -> None:
+        if not sources:
+            raise ValueError("CombinedSource requires at least one source")
+        self._sources = list(sources)
+
+    def next_event(self, timeout: float) -> InputEvent | None:
+        deadline = time.monotonic() + max(0.0, timeout)
+        per_source = max(0.05, min(0.5, timeout))
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            budget = min(per_source, remaining)
+            for source in self._sources:
+                event = source.next_event(budget)
+                if event is not None:
+                    return event
+
+
 class BusClient:
     """Thin HTTP client for the dashboard host. Uses stdlib only."""
 
@@ -223,8 +385,11 @@ class BusClient:
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._read_token = read_token
-        # The control token is used for POST /control. If absent, fall back to read token.
-        self._control_token = control_token or read_token
+        # The control token is used for POST /control. It MUST be distinct
+        # from the read token: if the host has no separate control token
+        # configured, the /control endpoint returns 503 and dispatching
+        # silently is worse than failing fast.
+        self._control_token = control_token or ""
         self._timeout = timeout
 
     def get_layout(self) -> Layout:
@@ -237,11 +402,9 @@ class BusClient:
         return Layout.from_dict(payload)
 
     def get_png(self, focus_tile_id: str | None = None) -> bytes:
-        from urllib.parse import quote as _quote
-
         url = f"{self._base_url}/dashboard.png"
         if focus_tile_id:
-            url += f"?focus_tile_id={_quote(focus_tile_id)}"
+            url += f"?focus_tile_id={urllib.parse.quote(focus_tile_id)}"
         request = urllib.request.Request(
             url,
             headers={"Authorization": f"Bearer {self._read_token}"},
@@ -250,13 +413,12 @@ class BusClient:
             return response.read()
 
     def post_control(self, tile_id: str, action: str) -> dict:
-        import secrets as _secrets
-
+        import secrets
         body = json.dumps(
             {
                 "tile_id": tile_id,
                 "action": action,
-                "nonce": _secrets.token_hex(8),
+                "nonce": secrets.token_hex(8),
                 "ts": int(time.time()),
             }
         ).encode("utf-8")
@@ -274,6 +436,8 @@ class BusClient:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             return {"status": "error", "code": exc.code, "detail": exc.read().decode("utf-8", errors="replace")[:200]}
+        except urllib.error.URLError as exc:
+            return {"status": "error", "code": -1, "detail": f"connection_failed: {exc.reason}"}
 
 
 class DashboardClient:
@@ -331,6 +495,20 @@ class DashboardClient:
         if next_id and next_id != self._focus_tile_id:
             self._focus_tile_id = next_id
 
+    def _focus_tile(self, raw_tile_id: str) -> None:
+        """Resolve a touch marker (``__raw__:x:y``) to a real tile id."""
+        if self._layout is None or not raw_tile_id.startswith("__raw__:"):
+            return
+        try:
+            _, xs, ys = raw_tile_id.split(":", 2)
+            x = float(xs)
+            y = float(ys)
+        except ValueError:
+            return
+        target = self._layout.tile_at(x, y)
+        if target and target != self._focus_tile_id:
+            self._focus_tile_id = target
+
     def run(self) -> None:
         """Run the client loop until stop() is called."""
         self._refresh_layout()
@@ -339,8 +517,11 @@ class DashboardClient:
         while not self._stop:
             event = self._source.next_event(self._event_poll_seconds)
             if event is not None:
-                if event.kind == "focus" and event.direction:
-                    self._focus_neighbor(event.direction)
+                if event.kind == "focus":
+                    if event.direction:
+                        self._focus_neighbor(event.direction)
+                    elif event.tile_id:
+                        self._focus_tile(event.tile_id)
                 elif event.kind == "activate":
                     self._dispatch()
                 # Always refresh the PNG after an input event so the focus border updates.
@@ -360,10 +541,21 @@ def _build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--control-token", default=os.getenv("HERMES_DASHBOARD_CONTROL_TOKEN", ""))
     parser.add_argument("--image", default="/tmp/hermes-dashboard.png")
     parser.add_argument("--refresh-seconds", type=float, default=15.0)
-    parser.add_argument("--input-device", default="/dev/input/event0")
+    parser.add_argument("--input-device", default="/dev/input/event0", help="5-way controller (e.g. /dev/input/event0)")
+    parser.add_argument("--touch-device", default="/dev/input/event1", help="Touchscreen device. Empty to disable touch.")
+    parser.add_argument("--touch-device-size", default="", help="WxH of the touch device in pixels (e.g. 1072x1448). Empty = no rescale.")
     parser.add_argument("--mock-events", default="", help="JSON list of InputEvent dicts for harness testing")
     parser.add_argument("--verbose", "-v", action="store_true")
     return parser
+
+
+def _install_signal_handlers(client: DashboardClient) -> None:
+    """Wire SIGTERM/SIGINT to a cooperative stop on the client."""
+    def _handler(signum: int, _frame: object) -> None:
+        LOGGER.info("received signal %s; stopping", signum)
+        client.stop()
+    signal.signal(signal.SIGTERM, _handler)
+    signal.signal(signal.SIGINT, _handler)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -385,6 +577,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.mock_events:
         events = [InputEvent(**e) for e in json.loads(args.mock_events)]
         source: InputSource = MockSource(events)
+    elif args.touch_device and os.path.exists(args.touch_device):
+        device_size = None
+        if args.touch_device_size:
+            try:
+                w, h = args.touch_device_size.split("x", 1)
+                device_size = (int(w), int(h))
+            except ValueError:
+                LOGGER.warning("invalid --touch-device-size %r; ignoring", args.touch_device_size)
+        five_way = FiveWaySource(args.input_device)
+        touch = TouchSource(device=args.touch_device, device_size=device_size)
+        source = CombinedSource([five_way, touch])
     else:
         source = FiveWaySource(args.input_device)
 
@@ -395,14 +598,7 @@ def main(argv: list[str] | None = None) -> int:
         refresh_seconds=args.refresh_seconds,
     )
 
-    # Cooperative shutdown on SIGTERM/SIGINT for KUAL.
-    def _signal_handler(signum: int, _frame: object) -> None:
-        LOGGER.info("received signal %s; stopping", signum)
-        client.stop()
-
-    signal.signal(signal.SIGTERM, _signal_handler)
-    signal.signal(signal.SIGINT, _signal_handler)
-
+    _install_signal_handlers(client)
     client.run()
     return 0
 

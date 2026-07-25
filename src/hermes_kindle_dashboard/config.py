@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 
 class ConfigSchema(BaseModel):
@@ -94,11 +94,11 @@ class ConfigSchema(BaseModel):
 
         return result
 
-    def model_dump(self, **kwargs) -> dict[str, Any]:
-        """Override to include computed fields."""
-        data = super().model_dump(**kwargs)
-        data["dashboard_url"] = f"http://{self.host_ip}:{self.host_port}/dashboard.png?token={self.dashboard_token}"
-        return data
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dashboard_url(self) -> str:
+        """Computed full URL the Kindle client should hit."""
+        return f"http://{self.host_ip}:{self.host_port}/dashboard.png?token={self.dashboard_token}"
 
 
 DEFAULT_TEMPLATE = """# Hermes Dashboard Kindle client configuration.
@@ -154,54 +154,51 @@ class ConfigManager:
         default_factory=lambda: Path("~/.config/hermes-kindle-dashboard/config.yaml").expanduser()
     )
     template_path: Path = field(
-        default_factory=lambda: ConfigManager._resolve_repo_path("kindle", "hermes_dashboard", "config.sh.example")
-    )
-    output_path: Path = field(
-        default_factory=lambda: ConfigManager._resolve_repo_path("kindle", "hermes_dashboard", "config.sh")
+        default_factory=lambda: ConfigManager._resolve_template_path()
     )
 
     @property
     def safe_output_path(self) -> Path:
-        """Return a config.sh path that lives outside the project tree.
+        """Path where regenerated config.sh is written in production.
 
-        The default ConfigManager output_path points to the project tree
-        (`kindle/hermes_dashboard/config.sh`), which is convenient for
-        development but problematic for production: an HTTP-driven regeneration
-        will write tokens into the tracked source tree.
-
-        This property returns an alternative path under
-        `~/.config/hermes-kindle-dashboard/rendered/config.sh` that is always
-        outside the repo.
+        Lives outside the project tree so HTTP-driven regeneration cannot
+        pollute the tracked source. The bundle builder overrides this with
+        its own destination via ``regenerate_config_sh(output_path=...)``.
         """
         return Path("~/.config/hermes-kindle-dashboard/rendered/config.sh").expanduser().resolve()
 
-    def __post_init__(self):
-        self.config_path = self.config_path.expanduser()
-        self.template_path = self.template_path.expanduser().resolve()
-        self.output_path = self.output_path.expanduser().resolve()
+    @property
+    def output_path(self) -> Path:
+        """Backwards-compat alias for the legacy on-tree output path."""
+        return self.safe_output_path
 
     @staticmethod
-    def _resolve_repo_path(*parts: str) -> Path:
-        """Resolve a path inside the project repo.
+    def _resolve_template_path() -> Path:
+        """Find the config.sh.example template.
 
-        Order of resolution:
-        1. ``HERMES_DASHBOARD_PROJECT_ROOT`` env var (if set), joined with parts.
+        Resolution order:
+        1. ``HERMES_DASHBOARD_PROJECT_ROOT`` env var (set in production).
         2. Walk up from this file looking for a sibling ``kindle/`` directory
            (covers editable installs and source checkouts).
-        3. Final fallback: ``parent.parent.parent`` of this file (the original
-           location; works for editable installs of the project).
+        3. Final fallback: relative to this file's grandparent.
         """
         import os
         env_root = os.environ.get("HERMES_DASHBOARD_PROJECT_ROOT")
         if env_root:
-            return Path(env_root).expanduser().joinpath(*parts).resolve()
+            candidate = Path(env_root).expanduser() / "kindle" / "hermes_dashboard" / "config.sh.example"
+            if candidate.exists():
+                return candidate.resolve()
         current = Path(__file__).resolve().parent
         for _ in range(8):
-            candidate = current.joinpath(*parts)
+            candidate = current / "kindle" / "hermes_dashboard" / "config.sh.example"
             if candidate.exists():
                 return candidate.resolve()
             current = current.parent
-        return Path(__file__).resolve().parent.parent.parent.joinpath(*parts)
+        return (Path(__file__).resolve().parent.parent.parent / "kindle" / "hermes_dashboard" / "config.sh.example")
+
+    def __post_init__(self) -> None:
+        self.config_path = self.config_path.expanduser()
+        self.template_path = self.template_path.expanduser().resolve()
 
     def load(self) -> ConfigSchema | None:
         """Load configuration from YAML file."""

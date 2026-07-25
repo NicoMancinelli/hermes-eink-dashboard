@@ -33,12 +33,15 @@ from hermes_kindle_dashboard.scheduler import ControlBus
 
 from kindle.client.interactive import (
     BusClient,
+    CombinedSource,
     DashboardClient,
     FiveWaySource,
     InputEvent,
     Layout,
     MockSource,
+    TapSource,
     Tile,
+    TouchSource,
 )
 
 
@@ -308,3 +311,194 @@ def test_focus_changes_via_neighbor(fake_host, tmp_path) -> None:
     client._focus_tile_id = "a"
     client._focus_neighbor("right")
     assert client._focus_tile_id == "b"
+
+
+
+# ===========================================================================
+# Touch support tests
+# ===========================================================================
+
+def test_layout_tile_at_returns_correct_tile() -> None:
+    """Layout.tile_at maps (x, y) to the tile under that coordinate."""
+    layout = Layout.from_dict(
+        {
+            "schema_version": 2,
+            "layout": {"columns": 4, "rows": 6, "tile_size": [240, 160], "grid_size": [1072, 1448]},
+            "tiles": [
+                {"id": "top-left", "label": "TL", "col": 0, "row": 0, "w": 2, "h": 1, "kind": "action", "action": None},
+                {"id": "top-right", "label": "TR", "col": 2, "row": 0, "w": 2, "h": 1, "kind": "action", "action": None},
+                {"id": "bottom", "label": "B", "col": 0, "row": 4, "w": 4, "h": 2, "kind": "action", "action": None},
+            ],
+            "focus": {"tile_id": "top-left", "x": 0, "y": 0},
+        }
+    )
+    # Inside the top-left tile (0..480, 0..160)
+    assert layout.tile_at(120, 80) == "top-left"
+    # Inside the top-right tile (480..960, 0..160)
+    assert layout.tile_at(700, 80) == "top-right"
+    # Inside the bottom tile (0..960, 640..960)
+    assert layout.tile_at(500, 700) == "bottom"
+    # Outside any tile
+    assert layout.tile_at(50, 1200) is None
+    assert layout.tile_at(-1, 80) is None
+
+
+def test_layout_tile_at_first_match_wins() -> None:
+    """When tiles overlap, the first tile in the layout's tile list wins."""
+    layout = Layout.from_dict(
+        {
+            "schema_version": 2,
+            "layout": {"columns": 4, "rows": 6, "tile_size": [240, 160], "grid_size": [1072, 1448]},
+            "tiles": [
+                {"id": "first", "label": "First", "col": 0, "row": 0, "w": 4, "h": 4, "kind": "action", "action": None},
+                {"id": "second", "label": "Second", "col": 1, "row": 1, "w": 2, "h": 2, "kind": "action", "action": None},
+            ],
+            "focus": {"tile_id": "first", "x": 0, "y": 0},
+        }
+    )
+    # Coordinate inside the overlap zone
+    assert layout.tile_at(400, 250) == "first"
+    # Coordinate inside the second tile only (top-right of second tile)
+    assert layout.tile_at(700, 100) == "first"
+
+
+def test_touch_source_emits_raw_coordinate_event(tmp_path) -> None:
+    """TouchSource translates a synthetic EV_ABS + BTN_TOUCH sequence
+    into a focus event tagged with __raw__:x:y."""
+    events_path = tmp_path / "events.bin"
+    # Synthesize a press at (500, 300). Layout matches: x=500, y=300.
+    # Single-touch protocol A sends ABS_X then ABS_Y then BTN_TOUCH=1.
+    import struct as _struct
+    payload = b""
+    payload += _struct.pack("llHHi", 1000, 0, 0x03, 0x00, 500)  # EV_ABS, ABS_X, 500
+    payload += _struct.pack("llHHi", 1000, 0, 0x03, 0x01, 300)  # EV_ABS, ABS_Y, 300
+    payload += _struct.pack("llHHi", 1000, 0, 0x01, 0x14A, 1)   # EV_KEY, BTN_TOUCH, press
+    events_path.write_bytes(payload)
+
+    src = TouchSource(device=str(events_path))
+    event = src.next_event(timeout=1.0)
+    assert event is not None
+    assert event.kind == "focus"
+    assert event.tile_id is not None
+    assert event.tile_id.startswith("__raw__:")
+    # (500, 300) -> "500:300"
+    assert event.tile_id == "__raw__:500:300"
+
+
+def test_touch_source_scales_to_layout(tmp_path) -> None:
+    """TouchSource rescales raw device coordinates to layout coordinates."""
+    events_path = tmp_path / "events.bin"
+    import struct as _struct
+    payload = b""
+    payload += _struct.pack("llHHi", 1000, 0, 0x03, 0x00, 100)  # x=100 on a 200x300 device
+    payload += _struct.pack("llHHi", 1000, 0, 0x03, 0x01, 100)  # y=100
+    payload += _struct.pack("llHHi", 1000, 0, 0x01, 0x14A, 1)
+    events_path.write_bytes(payload)
+
+    src = TouchSource(
+        device=str(events_path),
+        device_size=(200, 300),
+        layout_size=(1072, 1448),
+    )
+    event = src.next_event(timeout=1.0)
+    assert event is not None
+    # 100/200 * 1072 = 536; 100/300 * 1448 = 482 (rounded to int)
+    assert event.tile_id == "__raw__:536:483"
+
+
+def test_touch_source_missing_device_logs_and_returns_none(tmp_path, caplog) -> None:
+    """A missing touch device should log a warning and not crash."""
+    caplog.set_level("WARNING")
+    src = TouchSource(device=str(tmp_path / "does-not-exist"))
+    event = src.next_event(timeout=0.1)
+    assert event is None
+    assert any("touch device unavailable" in r.message for r in caplog.records)
+
+
+def test_tap_source_emits_events_for_each_tap() -> None:
+    """TapSource emits one focus event per tap with __raw__ markers."""
+    src = TapSource([(100, 200), (300, 400), (500, 600)])
+    e1 = src.next_event(timeout=0.1)
+    e2 = src.next_event(timeout=0.1)
+    e3 = src.next_event(timeout=0.1)
+    e4 = src.next_event(timeout=0.1)
+    assert e1.tile_id == "__raw__:100:200"
+    assert e2.tile_id == "__raw__:300:400"
+    assert e3.tile_id == "__raw__:500:600"
+    assert e4 is None
+
+
+def test_combined_source_returns_first_event() -> None:
+    """CombinedSource polls each source and returns the first non-None event."""
+    five_way = MockSource([InputEvent(kind="activate")])
+    tap = TapSource([])
+    src = CombinedSource([five_way, tap])
+    event = src.next_event(timeout=0.1)
+    assert event is not None
+    assert event.kind == "activate"
+
+
+def test_combined_source_requires_at_least_one() -> None:
+    """An empty source list is a programming error."""
+    with pytest.raises(ValueError):
+        CombinedSource([])
+
+
+def test_focus_tile_resolves_touch_marker_to_layout_tile() -> None:
+    """DashboardClient._focus_tile maps a touch marker via Layout.tile_at."""
+    layout = Layout.from_dict(
+        {
+            "schema_version": 2,
+            "layout": {"columns": 4, "rows": 6, "tile_size": [240, 160], "grid_size": [1072, 1448]},
+            "tiles": [
+                {"id": "a", "label": "A", "col": 0, "row": 0, "w": 1, "h": 1, "kind": "action", "action": "x"},
+                {"id": "b", "label": "B", "col": 1, "row": 0, "w": 1, "h": 1, "kind": "action", "action": "y"},
+            ],
+            "focus": {"tile_id": "a", "x": 0, "y": 0},
+        }
+    )
+    bus = BusClient("http://127.0.0.1:9999", "r", "c")
+    client = DashboardClient(bus=bus, source=MockSource([]), image_path="/tmp/x.png", refresh_seconds=1.0)
+    client._layout = layout
+    client._focus_tile_id = "a"
+    # Touch at (300, 50) lands inside tile 'b' (col=1, x in 240..480)
+    client._focus_tile("__raw__:300:50")
+    assert client._focus_tile_id == "b"
+
+
+def test_focus_tile_ignores_invalid_marker() -> None:
+    """Garbage in the tile_id should not crash the client."""
+    layout = Layout.from_dict(
+        {
+            "schema_version": 2,
+            "layout": {"columns": 4, "rows": 6, "tile_size": [240, 160], "grid_size": [1072, 1448]},
+            "tiles": [{"id": "a", "label": "A", "col": 0, "row": 0, "w": 1, "h": 1, "kind": "action", "action": None}],
+            "focus": {"tile_id": "a", "x": 0, "y": 0},
+        }
+    )
+    bus = BusClient("http://127.0.0.1:9999", "r", "c")
+    client = DashboardClient(bus=bus, source=MockSource([]), image_path="/tmp/x.png", refresh_seconds=1.0)
+    client._layout = layout
+    client._focus_tile_id = "a"
+    client._focus_tile("not-a-marker")
+    client._focus_tile("__raw__:not_numbers")
+    assert client._focus_tile_id == "a"
+
+
+def test_focus_tile_no_match_keeps_focus() -> None:
+    """Touch outside any tile should not change focus."""
+    layout = Layout.from_dict(
+        {
+            "schema_version": 2,
+            "layout": {"columns": 4, "rows": 6, "tile_size": [240, 160], "grid_size": [1072, 1448]},
+            "tiles": [{"id": "a", "label": "A", "col": 0, "row": 0, "w": 1, "h": 1, "kind": "action", "action": None}],
+            "focus": {"tile_id": "a", "x": 0, "y": 0},
+        }
+    )
+    bus = BusClient("http://127.0.0.1:9999", "r", "c")
+    client = DashboardClient(bus=bus, source=MockSource([]), image_path="/tmp/x.png", refresh_seconds=1.0)
+    client._layout = layout
+    client._focus_tile_id = "a"
+    # Far below any tile
+    client._focus_tile("__raw__:500:1400")
+    assert client._focus_tile_id == "a"

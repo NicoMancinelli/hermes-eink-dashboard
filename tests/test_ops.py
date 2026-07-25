@@ -45,7 +45,38 @@ def test_host_installer_configures_independent_refresh_interval() -> None:
     assert "HERMES_DASHBOARD_CACHE_SECONDS=" not in installer
 
 
-def test_bundle_builder_injects_host_and_token_only_into_zip(tmp_path: Path) -> None:
+def test_bundle_builder_template_mode_uses_placeholders(tmp_path: Path) -> None:
+    """Default mode produces a bundle with placeholder tokens; safe to publish."""
+    output = tmp_path / "hermes-dashboard-kual.zip"
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/build_kual_bundle.py"),
+            "--output",
+            str(output),
+        ],
+        check=True,
+    )
+
+    with zipfile.ZipFile(output) as archive:
+        names = set(archive.namelist())
+        assert "hermes_dashboard/menu.json" in names
+        assert "hermes_dashboard/bin/fetch.sh" in names
+        assert "hermes_dashboard/bin/post_install.sh" in names
+        config = archive.read("hermes_dashboard/config.sh").decode()
+        assert 'HOST_IP="PLACEHOLDER.lan"' in config
+        assert 'DASHBOARD_TOKEN="PLACEHOLDER_TOKEN"' in config
+        assert 'CONTROL_TOKEN=""' in config
+        # The real pdi host must NEVER appear in a template bundle.
+        assert "192.168.1.119" not in config
+        mode = archive.getinfo("hermes_dashboard/bin/fetch.sh").external_attr >> 16
+        assert mode & 0o111
+
+    assert output.stat().st_mode % 0o1000 == 0o600
+
+
+def test_bundle_builder_personal_mode_embeds_real_tokens(tmp_path: Path) -> None:
+    """--inject-tokens mode embeds real tokens; not safe to publish."""
     token_file = tmp_path / "token"
     token_file.write_text("abc123secure")
     output = tmp_path / "hermes-dashboard-kual.zip"
@@ -53,6 +84,7 @@ def test_bundle_builder_injects_host_and_token_only_into_zip(tmp_path: Path) -> 
         [
             sys.executable,
             str(ROOT / "scripts/build_kual_bundle.py"),
+            "--inject-tokens",
             "--host",
             "10.0.0.8",
             "--port",
@@ -68,13 +100,43 @@ def test_bundle_builder_injects_host_and_token_only_into_zip(tmp_path: Path) -> 
     with zipfile.ZipFile(output) as archive:
         names = set(archive.namelist())
         assert "hermes_dashboard/menu.json" in names
-        assert "hermes_dashboard/bin/fetch.sh" in names
         config = archive.read("hermes_dashboard/config.sh").decode()
         assert 'HOST_IP="10.0.0.8"' in config
         assert 'HOST_PORT="9999"' in config
         assert 'DASHBOARD_TOKEN="abc123secure"' in config
-        mode = archive.getinfo("hermes_dashboard/bin/fetch.sh").external_attr >> 16
-        assert mode & 0o111
+        # Personal mode should never leak the placeholder default.
+        assert 'HOST_IP="PLACEHOLDER.lan"' not in config
 
-    assert output.stat().st_mode % 0o1000 == 0o600
     assert "abc123secure" not in (ROOT / "kindle/hermes_dashboard/config.sh.example").read_text()
+
+
+def test_post_install_script_replaces_placeholders(tmp_path: Path) -> None:
+    """The bundle ships a post_install.sh that replaces placeholders in config.sh."""
+    output = tmp_path / "hermes-dashboard-kual.zip"
+    subprocess.run(
+        [sys.executable, str(ROOT / "scripts/build_kual_bundle.py"), "--output", str(output)],
+        check=True,
+    )
+    with zipfile.ZipFile(output) as archive:
+        archive.extractall(tmp_path / "bundle")
+    config_path = tmp_path / "bundle" / "hermes_dashboard" / "config.sh"
+    assert config_path.exists()
+    script = tmp_path / "bundle" / "hermes_dashboard" / "bin" / "post_install.sh"
+    assert script.exists()
+    subprocess.run(
+        [
+            "sh",
+            str(script),
+            "--host", "10.0.0.42",
+            "--port", "9120",
+            "--read-token", "tok",
+            "--control-token", "ctrl",
+        ],
+        cwd=str(tmp_path / "bundle" / "hermes_dashboard"),
+        check=True,
+    )
+    config_text = config_path.read_text()
+    assert 'HOST_IP="10.0.0.42"' in config_text
+    assert 'DASHBOARD_TOKEN="tok"' in config_text
+    assert 'CONTROL_TOKEN="ctrl"' in config_text
+    assert 'PLACEHOLDER_TOKEN' not in config_text

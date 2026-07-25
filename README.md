@@ -34,8 +34,17 @@ Then build the Kindle bundle and copy it to the device:
 ```bash
 gh repo clone NicoMancinelli/hermes-eink-dashboard
 cd hermes-eink-dashboard
-python3 scripts/build_kual_bundle.py --host 192.168.1.42 --port 9120
-# Copy dist/hermes-dashboard-kual.zip to your Kindle and install via KUAL.
+# Build a portable template bundle (no real tokens; safe to publish):
+python3 scripts/build_kual_bundle.py --output dist/hermes-dashboard-kual.zip
+# Copy dist/hermes-dashboard-kual.zip to your Kindle and unzip it under
+# /mnt/us/extensions/, then run bin/post_install.sh on the Kindle to
+# configure the host + tokens.
+```
+
+For personal/dev builds that embed real tokens directly (do NOT publish these):
+
+```bash
+python3 scripts/build_kual_bundle.py   --inject-tokens   --host 192.168.1.42   --token-file ~/.config/hermes-kindle-dashboard/token
 ```
 
 ## What it shows
@@ -103,6 +112,28 @@ tests/                       collector, renderer, HTTP, and KUAL tests
 - [FBInk](https://github.com/NiLuJe/FBInk) installed as a KUAL extension or available in `PATH`
 - Wi-Fi access to the host
 
+## Touch input
+
+Most modern Kindles (Paperwhite 2+, Voyage, Oasis, Scribe) have a
+capacitive touchscreen. The interactive client reads it via
+`/dev/input/event1` (or any device you pass with `--touch-device`). The
+client expects to be running on a jailbroken Kindle with:
+
+- `/dev/input/event1` readable by the user (default path; pass
+  `--touch-device /path/to/eventN` to override).
+- The Kindle's `EV_ABS` resolution matches the layout `grid_size` returned
+  by the host (default 1072 × 1448 for Paperwhite 3 / Oasis 3). For other
+  resolutions, pass `--touch-device-size WxH` to enable rescaling.
+
+Tap detection: `BTN_TOUCH` press marks the start, release marks the end.
+Inside a single tile, this synthesizes a `focus` event on press and an
+`activate` event on release (tap). A drag (press in tile A, release in tile
+B) emits a focus event for B on release, with no activate.
+
+There is no multi-touch support in v0.4 (the Kindle touchscreen is
+single-touch). Long-press, pinch, and gestures are not recognized.
+
+
 ## Install from source (alternative)
 
 If you'd rather not pipe to bash, clone the repo and run the installer directly:
@@ -142,28 +173,52 @@ If the host firewall blocks the port, allow TCP 9120 **only from the Kindle/LAN 
 
 ## Build and install the KUAL extension
 
-Build a ZIP using the same Kindle-reachable host and the private token created above:
+The bundle builder has two modes:
+
+### Template mode (default, safe to publish)
+
+```sh
+python3 scripts/build_kual_bundle.py --output dist/hermes-dashboard-kual.zip
+```
+
+Produces a ZIP with placeholder tokens (`HOST_IP=PLACEHOLDER.lan`,
+`DASHBOARD_TOKEN=PLACEHOLDER_TOKEN`). Use this when uploading to GitHub
+releases or sharing with other users.
+
+### Personal mode (embeds real tokens; do NOT publish)
 
 ```sh
 python3 scripts/build_kual_bundle.py \
+  --inject-tokens \
   --host 192.168.1.50 \
   --port 9120 \
-  --output dist/hermes-dashboard-kual.zip
+  --token-file ~/.config/hermes-kindle-dashboard/token \
+  --control-token-file ~/.config/hermes-kindle-dashboard/control_token \
+  --output dist/hermes-dashboard-kual-personal.zip
 ```
 
-The generated ZIP contains `hermes_dashboard/config.sh` with the host and token. `dist/` is gitignored.
+Use this for your own device. The bundle will work without any post-install
+step.
+
+### Install on the Kindle
 
 1. Connect the Kindle over USB.
-2. Extract the ZIP so the final path is:
-   `/mnt/us/extensions/hermes_dashboard/menu.json`
+2. Extract the ZIP so the final path is `/mnt/us/extensions/hermes_dashboard/menu.json`.
 3. Confirm FBInk is installed. The client checks:
    - `/mnt/us/extensions/FBInk/bin/fbink`
    - `/mnt/us/extensions/fbink/bin/fbink`
    - `/usr/bin/fbink` and `PATH`
-4. Disconnect USB and open KUAL.
-5. Choose **Hermes Dashboard → Start Dashboard**.
+4. **Template-mode bundles only**: run `bin/post_install.sh` (interactively,
+   or pass `--host`, `--port`, `--read-token`, and optionally `--control-token`).
+5. Disconnect USB and open KUAL.
+6. Choose **Hermes Dashboard → Start Dashboard**.
 
-**Stop Dashboard** terminates the fetch loop, restores `preventScreenSaver=0`, and restarts the Amazon UI. If the host is unreachable, FBInk shows one clean offline screen and continues retrying without repeated flashing.
+The `post_install.sh` script replaces placeholder values in `config.sh` with
+real ones. It is idempotent and safe to re-run.
+
+**Stop Dashboard** terminates the fetch loop, restores `preventScreenSaver=0`,
+and restarts the Amazon UI. If the host is unreachable, FBInk shows one clean
+offline screen and continues retrying without repeated flashing.
 
 ## Display sizes
 
@@ -232,7 +287,21 @@ TOKEN=development-only
 
 Query auth is restricted to the deprecated routes because BusyBox `wget` header support varies across Kindle firmware. Uvicorn access logging is disabled so those query tokens are not logged.
 
-## Interactive client (Phase 1+2)
+## Interactive client
+
+The Kindle client (`kindle/client/interactive.py`) supports both 5-way nav
+and touchscreen input:
+
+- **5-way nav**: standard Kindle direction pad. Key codes 103/108/105/106
+  are mapped to up/down/left/right; 28 is select.
+- **Touch** (Paperwhite 3+, Voyage, Oasis, Scribe): reads `/dev/input/event1`
+  using `EV_ABS` + `BTN_TOUCH`. Single-touch protocol A (`ABS_X`/`ABS_Y`) and
+  multi-touch protocol B (`ABS_MT_POSITION_X`/`Y`) are both handled.
+- Coordinates are mapped to tile ids via `Layout.tile_at()` using the
+  layout's `grid_size` from the host. Optional `--touch-device-size WxH`
+  rescales if the device pixel space differs from the layout grid.
+- The client is multiplexed via `CombinedSource` so a Kindle with both
+  inputs works transparently.
 
 The host-side interactive layer is in place:
 
@@ -240,10 +309,15 @@ The host-side interactive layer is in place:
 - `POST /control` validates allowlist, 60s nonce dedup, ±30s timestamp window, and per-action rate limit (default 1/s).
 - `GET /control/events` returns long-poll responses when an action is dispatched.
 - `render_layout_dashboard()` paints a tile grid with a 2px focus border around the focused tile.
-- `--layout-yaml` flag loads a custom layout from a simple key:value file.
-- `--focus-tile` query parameter on `/dashboard.png` highlights the focused tile in the rendered PNG.
+- `--layout-yaml` flag loads a custom layout from YAML.
+- `--focus-tile` / `focus_tile_id` query parameter on `/dashboard.png`
+  highlights the focused tile in the rendered PNG.
+- Declarative `/config` endpoint lets the host push KUAL config changes
+  to `~/.config/hermes-kindle-dashboard/config.yaml`.
 
-The Kindle interactive client (5-way + touch) lands in Phase 3. The legacy read-only Kindle client continues to work unchanged.
+**Requirements for the interactive client on the Kindle**: Python 3 (install
+via `mrpackage` if not already present). The legacy read-only `fetch.sh`
+loop in the KUAL bundle does NOT require Python.
 
 ## Security and privacy
 
