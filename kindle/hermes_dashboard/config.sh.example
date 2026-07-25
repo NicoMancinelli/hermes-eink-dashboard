@@ -1,10 +1,35 @@
 # Hermes Dashboard Kindle client configuration.
 # Copy to config.sh and replace HOST_IP and CHANGE_ME.
+#
+# Required keys:
+#   HOST_IP          - LAN/tailnet address of the host running hermes-kindle-dashboard.
+#   HOST_PORT        - HTTP port on the host (default 9120).
+#   DASHBOARD_TOKEN  - Read token. Used for /dashboard.png and /dashboard.json.
+#
+# Optional keys (Phase 5+):
+#   CONTROL_TOKEN    - Write token. Required for /control and /control/events.
+#                      Generate with:
+#                        python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
+#                      and add to host.env as HERMES_DASHBOARD_CONTROL_TOKEN.
+#                      Leave empty to disable interactive controls (write endpoints
+#                      return 503 service unavailable).
+#   REFRESH_INTERVAL - Seconds between dashboard refreshes (default 45).
+#   DOWNLOAD_TIMEOUT - Per-request timeout in seconds (default 12).
+#   FULL_REFRESH_EVERY - Force a full (non-partial) refresh every N cycles (default 10).
+#   KEEP_AWAKE       - Set to 1 to keep the Kindle awake while the dashboard is running.
+#   STOP_FRAMEWORK   - Set to 1 to stop the Kindle framework while the dashboard runs.
+#   FBINK            - Override path to fbink (auto-detected by default).
 
 HOST_IP="HOST_IP"
 HOST_PORT="9120"
 DASHBOARD_TOKEN="CHANGE_ME"
 DASHBOARD_URL="http://${HOST_IP}:${HOST_PORT}/dashboard.png?token=${DASHBOARD_TOKEN}"
+
+# Phase 5+ interactive controls (optional).
+# Generate a separate token for write access with:
+#   python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
+# Leave empty to disable /control endpoints (they return 503 service unavailable).
+CONTROL_TOKEN=""
 
 # E-Ink/power settings.
 REFRESH_INTERVAL="45"

@@ -19,7 +19,10 @@ from .actions import (
     RateLimitExceededError,
     UnknownActionError,
 )
+from collections.abc import Callable
 from .aggregators.base import Aggregator
+from .config import ConfigManager
+from .config import ConfigManager, ConfigSchema
 from .contract import PanelCache, build_default_layout, dashboard_json
 from .render import RenderOptions, render_dashboard, render_layout_dashboard
 from .scheduler import ControlBus, collect_once, run_aggregator_loop
@@ -85,10 +88,12 @@ def create_app(
     bus: ControlBus | None = None,
     registry: ActionRegistry | None = None,
     layout: dict[str, Any] | None = None,
+    config_manager_factory: Callable[[], ConfigManager] | None = None,
 ) -> FastAPI:
     panel_cache = cache or PanelCache()
     control_bus = bus or ControlBus()
     action_registry = registry or ActionRegistry()
+    config_manager = (config_manager_factory or ConfigManager)()
     providers = tuple(aggregators)
     for provider in providers:
         panel_cache.register(provider.name)
@@ -124,6 +129,7 @@ def create_app(
     app.state.control_bus = control_bus
     app.state.action_registry = action_registry
     app.state.layout = layout
+    app.state.config_manager = config_manager
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -236,6 +242,79 @@ def create_app(
         effective_timeout = min(max(0.0, float(timeout)), 30.0)
         event = await control_bus.wait_for_event(timeout=effective_timeout)
         return JSONResponse({"event": event})
+
+    @app.get("/config")
+    async def get_config(request: Request) -> JSONResponse:
+        """Get the current declarative configuration."""
+        _require_control_auth(request, settings)
+        config_manager = app.state.config_manager
+        config = config_manager.load()
+        if config is None:
+            return JSONResponse({"config": None, "message": "No configuration file found. POST to /config to create one."})
+        return JSONResponse({"config": config.model_dump()})
+
+    @app.post("/config")
+    async def post_config(request: Request) -> JSONResponse:
+        """Update the declarative configuration and regenerate config.sh."""
+        _require_control_auth(request, settings)
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+
+        try:
+            config = ConfigSchema(**body)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+        config_manager = app.state.config_manager
+        config_manager.save(config)
+        rendered = config_manager.regenerate_config_sh(config)
+        config_sh_path = config_manager.safe_output_path
+
+        return JSONResponse({
+            "status": "ok",
+            "message": "Configuration saved and config.sh regenerated",
+            "config": config.model_dump(),
+            "config_sh_path": str(config_sh_path),
+        })
+
+    @app.post("/config/preview")
+    async def post_config_preview(request: Request) -> JSONResponse:
+        """Preview the config.sh that would be generated without saving."""
+        _require_control_auth(request, settings)
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+
+        try:
+            config = ConfigSchema(**body)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+        config_manager = app.state.config_manager
+        template = config_manager.load_template()
+        rendered = config.to_config_sh(template)
+
+        return JSONResponse({
+            "status": "ok",
+            "preview": rendered,
+        })
+
+    @app.get("/config/example")
+    async def get_config_example(request: Request) -> JSONResponse:
+        """Get an example configuration YAML."""
+        _require_control_auth(request, settings)
+        config_manager = app.state.config_manager
+        example_yaml = config_manager.get_example_config()
+        return JSONResponse({
+            "example_yaml": example_yaml,
+        })
 
     return app
 
