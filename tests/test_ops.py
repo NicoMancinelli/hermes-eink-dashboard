@@ -167,3 +167,80 @@ def test_host_installer_generates_control_token(tmp_path: Path) -> None:
     env_text = (config_dir / "host.env").read_text()
     assert "HERMES_DASHBOARD_CONTROL_TOKEN_FILE" in env_text
     assert str(config_dir / "control_token") in env_text
+
+
+
+def test_post_install_then_start_interactive_e2e(tmp_path: Path) -> None:
+    """Bundle → post_install → start_interactive end-to-end on the local filesystem.
+
+    Builds a template bundle, extracts it, runs post_install.sh with real
+    token args, then runs start_interactive.sh against a stub python3 and
+    verifies the launcher invokes the client with the right argv. The
+    client itself exits cleanly because the input devices don't exist on
+    pdi; we just verify the launcher constructed the right command line.
+    """
+    import subprocess
+    import zipfile
+
+    bundle = tmp_path / "bundle.zip"
+    subprocess.run(
+        [sys.executable, str(ROOT / "scripts/build_kual_bundle.py"), "--output", str(bundle)],
+        check=True,
+    )
+    extract_dir = tmp_path / "extracted"
+    with zipfile.ZipFile(bundle) as archive:
+        archive.extractall(extract_dir)
+    ext = extract_dir / "hermes_dashboard"
+    assert (ext / "bin" / "interactive_client.py").exists()
+    assert (ext / "bin" / "start_interactive.sh").exists()
+    assert (ext / "bin" / "stop_interactive.sh").exists()
+
+    # Replace /mnt paths with tmp paths so the scripts work without root.
+    docs = tmp_path / "documents"
+    state = tmp_path / "state"
+    docs.mkdir()
+    state.mkdir()
+    start_script = (ext / "bin" / "start_interactive.sh").read_text()
+    start_script = start_script.replace("/mnt/us/extensions/hermes_dashboard", str(ext))
+    start_script = start_script.replace("/mnt/us/documents", str(docs))
+    start_script = start_script.replace("/tmp/hermes_dashboard", str(state))
+    # Inject a stub python3 by using the venv's python3 (works as a stand-in
+    # because we're only validating the launcher logic).
+    stub_python = sys.executable
+    # Replace the list of python3 candidates with a guaranteed-miss list
+    # followed by the real interpreter, so the launcher picks it up.
+    start_script = start_script.replace(
+        '"/mnt/us/python3/bin/python3"',
+        '"/nonexistent/python3"',
+    )
+    (ext / "bin" / "start_interactive.sh").write_text(start_script)
+
+    # Populate config.sh with real-looking tokens via post_install.sh.
+    subprocess.run(
+        [
+            "sh",
+            str(ext / "bin" / "post_install.sh"),
+            "--host", "10.0.0.42",
+            "--read-token", "rt",
+            "--control-token", "ct",
+        ],
+        cwd=str(ext),
+        check=True,
+    )
+    config_text = (ext / "config.sh").read_text()
+    assert 'HOST_IP="10.0.0.42"' in config_text
+    assert 'DASHBOARD_TOKEN="rt"' in config_text
+    assert 'CONTROL_TOKEN="ct"' in config_text
+
+    # Run the launcher. It will exit because /dev/input/event0 doesn't exist
+    # in the test env, but the LOG should show the launcher constructed
+    # the right argv. We verify via the log, not by waiting for the process.
+    subprocess.run(
+        ["sh", str(ext / "bin" / "start_interactive.sh")],
+        check=False,
+    )
+    log_text = (docs / "hermes-dashboard.log").read_text()
+    assert "starting interactive client" in log_text
+    assert "10.0.0.42" in log_text
+    assert "interactive_client.py" in log_text
+    assert "--control-token ct" in log_text

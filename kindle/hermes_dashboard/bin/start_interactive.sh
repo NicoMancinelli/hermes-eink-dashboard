@@ -92,21 +92,23 @@ if [ "${STOP_FRAMEWORK:-1}" = "1" ]; then
     fi
 fi
 
-# Build the client args.
-args=""
-args="$args --host $HOST_IP"
-args="$args --port ${HOST_PORT:-9120}"
-args="$args --read-token $DASHBOARD_TOKEN"
+# Build the client args as positional parameters via `set --`. POSIX sh
+# doesn't have arrays, so positional parameters are the portable equivalent.
+# Each arg is a single token; the launcher fields never contain whitespace.
+set -- \
+    --host "$HOST_IP" \
+    --port "${HOST_PORT:-9120}" \
+    --read-token "$DASHBOARD_TOKEN" \
+    --input-device /dev/input/event0 \
+    --touch-device /dev/input/event1 \
+    --image /tmp/hermes-dashboard-interactive.png \
+    --refresh-seconds "${REFRESH_INTERVAL:-15}"
 if [ -n "${CONTROL_TOKEN:-}" ]; then
-    args="$args --control-token $CONTROL_TOKEN"
+    set -- "$@" --control-token "$CONTROL_TOKEN"
 fi
-args="$args --input-device /dev/input/event0"
-args="$args --touch-device /dev/input/event1"
-args="$args --image /tmp/hermes-dashboard-interactive.png"
-args="$args --refresh-seconds ${REFRESH_INTERVAL:-15}"
 
-log "starting interactive client: $PYTHON_BIN $CLIENT $args"
-nohup "$PYTHON_BIN" "$CLIENT" $args >> "$LOG" 2>&1 &
+log "starting interactive client: $PYTHON_BIN $CLIENT $*"
+nohup "$PYTHON_BIN" "$CLIENT" "$@" >> "$LOG" 2>&1 &
 pid=$!
 echo "$pid" > "$PIDFILE"
 log "started interactive pid=$pid"
