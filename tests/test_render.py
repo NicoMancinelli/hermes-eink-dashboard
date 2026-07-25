@@ -137,7 +137,7 @@ def test_parse_layout_yaml() -> None:
     yaml_text = """
 columns: 4
 rows: 6
-grid_size: 1072, 1448
+grid_size: [1072, 1448]
 tiles:
   - id: wf:refresh
     label: Refresh

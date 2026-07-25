@@ -60,6 +60,7 @@ def test_workflow_rejects_not_allowlisted_command(tmp_path: Path):
 
     with pytest.raises(UnknownActionError):
         registry.dispatch(action="workflow.forbidden_cmd", ts=1000.0, now=1000.0)
+        registry.wait_for_pending()
 
 
 def test_alert_dismiss_persists(tmp_path: Path):
@@ -137,6 +138,7 @@ def test_yaml_config_overrides_default_refresh_handler(tmp_path: Path):
 
     # Dispatch the workflow and verify the YAML command ran (not the no-op).
     registry.dispatch(action="workflow.refresh", ts=1000.0, now=1000.0)
+    registry.wait_for_pending()
     status_file = config_dir / "actions" / "workflow.refresh.json"
     assert status_file.exists()
     data = json.loads(status_file.read_text(encoding="utf-8"))
@@ -172,3 +174,33 @@ def test_actions_yaml_size_limit_exceeded(tmp_path: Path, caplog: pytest.LogCapt
     res2 = parse_action_config(big_content)
     assert res2 == {}
 
+
+
+def test_dispatch_returns_before_handler_completes(tmp_path: Path) -> None:
+    """A slow handler must not block the dispatch caller."""
+    import time as _time
+
+    started = []
+    finished = []
+
+    class SlowHandler:
+        def __call__(self, **kwargs):
+            started.append(_time.monotonic())
+            _time.sleep(0.5)  # simulate a slow workflow
+            finished.append(_time.monotonic())
+
+    registry = ActionRegistry()
+    registry.register("slow.test", handler=SlowHandler(), rate_limit=0.0)
+
+    before = _time.monotonic()
+    registry.dispatch(action="slow.test", ts=before, now=before)
+    after = _time.monotonic()
+
+    # Dispatch itself should return immediately. Allow some scheduling slack.
+    assert after - before < 0.1, f"dispatch took {(after - before) * 1000:.1f}ms (should be <100ms)"
+    assert started  # handler was actually invoked
+    assert not finished  # ...but has not completed yet
+
+    # Wait for the handler to finish, then verify it ran.
+    registry.wait_for_pending()
+    assert finished

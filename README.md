@@ -153,8 +153,16 @@ The installer creates:
 
 - isolated venv: `~/.local/share/hermes-kindle-dashboard/venv`
 - private config: `~/.config/hermes-kindle-dashboard/host.env`
-- private random token: `~/.config/hermes-kindle-dashboard/token`
+- private random read token: `~/.config/hermes-kindle-dashboard/token`
+- private random control token: `~/.config/hermes-kindle-dashboard/control_token`
 - user service: `~/.config/systemd/user/hermes-kindle-dashboard.service`
+
+The control token enables `POST /control`, `GET /control/events`,
+`GET /config`, and `POST /config`. Without it, those endpoints return
+`503 Service Unavailable` (the read token does not silently grant write
+access). The KUAL bundle for your Kindle can either embed both tokens
+(personal mode) or use placeholders that you fill in via
+`bin/post_install.sh` after copying to the Kindle.
 
 Verify it without exposing the token:
 
@@ -318,6 +326,27 @@ The host-side interactive layer is in place:
 **Requirements for the interactive client on the Kindle**: Python 3 (install
 via `mrpackage` if not already present). The legacy read-only `fetch.sh`
 loop in the KUAL bundle does NOT require Python.
+
+### Interactive flow example
+
+1. Kindle connects to the LAN and resolves `HOST_IP`.
+2. KUAL → Hermes Dashboard → **Start Interactive Dashboard** launches
+   `bin/start_interactive.sh`, which finds `python3` (via mrpackage's
+   `/mnt/us/python3/bin/python3` or `PATH`) and execs the bundled
+   `bin/interactive_client.py`.
+3. The client reads `GET /dashboard.json` to learn the layout.
+4. On a 5-way button press or touch tap, the client computes the next
+   focused tile via `Layout.neighbor()` (5-way) or `Layout.tile_at(x, y)`
+   (touch).
+5. The client refetches `GET /dashboard.png?focus_tile_id=<id>` so the
+   focus border updates.
+6. On Select (5-way) or tap-up (touch), the client sends
+   `POST /control` with the focused tile's `action`.
+7. The host validates, dispatches the handler in a thread pool
+   (so the request returns immediately), and publishes to
+   `GET /control/events` long-poll subscribers.
+8. The host's renderer regenerates `/dashboard.png` so the next refresh
+   reflects any state change from the action.
 
 ## Security and privacy
 

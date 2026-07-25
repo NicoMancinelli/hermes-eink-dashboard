@@ -9,7 +9,9 @@ EXTENSION = ROOT / "kindle" / "hermes_dashboard"
 
 
 def test_kual_extension_contains_required_actions_and_scripts() -> None:
-    required = {
+    # Files that MUST be present in the source tree (the bundle builder
+    # copies these verbatim).
+    required_source = {
         "config.xml",
         "menu.json",
         "config.sh.example",
@@ -17,19 +19,24 @@ def test_kual_extension_contains_required_actions_and_scripts() -> None:
         "bin/fetch.sh",
         "bin/refresh.sh",
         "bin/stop.sh",
+        "bin/start_interactive.sh",
+        "bin/stop_interactive.sh",
+        "bin/post_install.sh",
     }
     present = {str(path.relative_to(EXTENSION)) for path in EXTENSION.rglob("*") if path.is_file()}
-    assert required <= present
+    assert required_source <= present
 
     menu = json.loads((EXTENSION / "menu.json").read_text())
     root = menu["items"][0]
     assert root["name"] == "Hermes Dashboard"
     actions = {item["name"]: item["params"] for item in root["items"]}
-    assert actions == {
-        "Start Dashboard": "/mnt/us/extensions/hermes_dashboard/bin/start.sh",
-        "Manual Refresh": "/mnt/us/extensions/hermes_dashboard/bin/refresh.sh",
-        "Stop Dashboard": "/mnt/us/extensions/hermes_dashboard/bin/stop.sh",
-    }
+    # Required menu entries.
+    assert actions["Start Dashboard (read-only)"] == "/mnt/us/extensions/hermes_dashboard/bin/start.sh"
+    assert actions["Start Interactive Dashboard"] == "/mnt/us/extensions/hermes_dashboard/bin/start_interactive.sh"
+    assert actions["Manual Refresh"] == "/mnt/us/extensions/hermes_dashboard/bin/refresh.sh"
+    assert actions["Stop Dashboard"] == "/mnt/us/extensions/hermes_dashboard/bin/stop.sh"
+    assert actions["Stop Interactive Dashboard"] == "/mnt/us/extensions/hermes_dashboard/bin/stop_interactive.sh"
+    assert actions["Run Post-Install (configure host + tokens)"] == "/mnt/us/extensions/hermes_dashboard/bin/post_install.sh"
 
 
 def test_kindle_scripts_are_posix_shell_and_have_lifecycle_guards() -> None:
@@ -57,3 +64,25 @@ def test_committed_kindle_config_is_generic_and_secret_free() -> None:
     assert "192.168." not in config
     assert "100.100." not in config
     assert "neek" not in config.lower()
+
+
+
+def test_built_bundle_includes_interactive_client() -> None:
+    """The bundle builder must include the Python interactive client."""
+    import subprocess
+    import sys
+    import tempfile
+    import zipfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        output = Path(tmp) / "test-bundle.zip"
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts/build_kual_bundle.py"), "--output", str(output)],
+            check=True,
+        )
+        with zipfile.ZipFile(output) as archive:
+            names = set(archive.namelist())
+            assert "hermes_dashboard/bin/interactive_client.py" in names
+            assert "hermes_dashboard/bin/start_interactive.sh" in names
+            assert "hermes_dashboard/bin/stop_interactive.sh" in names
+            assert "hermes_dashboard/bin/post_install.sh" in names

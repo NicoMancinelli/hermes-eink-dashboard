@@ -142,6 +142,12 @@ def build(
     with tempfile.TemporaryDirectory(prefix="hermes-kual-") as temporary:
         extension = Path(temporary) / "hermes_dashboard"
         shutil.copytree(SOURCE, extension)
+        # Bundle the interactive Python client + launcher scripts.
+        interactive_client = ROOT / "kindle" / "client" / "interactive.py"
+        if interactive_client.exists():
+            (extension / "bin" / "interactive_client.py").write_bytes(
+                interactive_client.read_bytes()
+            )
         example = extension / "config.sh.example"
         config = example.read_text(encoding="utf-8")
         config = config.replace('HOST_IP="HOST_IP"', f'HOST_IP="{host}"')

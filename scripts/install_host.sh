@@ -48,6 +48,7 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-kindle-dashboard"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/hermes-kindle-dashboard"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 TOKEN_FILE="$CONFIG_DIR/token"
+CONTROL_TOKEN_FILE="$CONFIG_DIR/control_token"
 ENV_FILE="$CONFIG_DIR/host.env"
 VENV="$DATA_DIR/venv"
 
@@ -58,6 +59,11 @@ if [ ! -s "$TOKEN_FILE" ]; then
   python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > "$TOKEN_FILE"
 fi
 chmod 600 "$TOKEN_FILE"
+if [ ! -s "$CONTROL_TOKEN_FILE" ]; then
+  umask 077
+  python3 -c 'import secrets; print(secrets.token_hex(32))' > "$CONTROL_TOKEN_FILE"
+fi
+chmod 600 "$CONTROL_TOKEN_FILE"
 
 python3 -m venv "$VENV"
 PYTHONPATH='' "$VENV/bin/python" -m pip install --quiet --upgrade pip
@@ -73,19 +79,28 @@ HERMES_DASHBOARD_BIT_DEPTH=1
 HERMES_DASHBOARD_CONTEXT_LIMIT=$CONTEXT_LIMIT
 HERMES_DASHBOARD_REFRESH_SECONDS=$REFRESH_SECONDS
 HERMES_DASHBOARD_TOKEN_FILE=$TOKEN_FILE
+HERMES_DASHBOARD_CONTROL_TOKEN_FILE=$CONTROL_TOKEN_FILE
 HERMES_HOME=$HOME/.hermes
 EOF
 chmod 600 "$ENV_FILE"
 install -m 0644 "$ROOT/systemd/hermes-kindle-dashboard.service" "$UNIT_DIR/hermes-kindle-dashboard.service"
 
-systemctl --user daemon-reload
-if [ "$START_SERVICE" = "1" ]; then
-  systemctl --user enable hermes-kindle-dashboard.service >/dev/null
-  systemctl --user restart hermes-kindle-dashboard.service
+# Skip systemd integration when running in a chroot/test environment without
+# a user bus. Detected by trying systemctl and falling back gracefully.
+if systemctl --user >/dev/null 2>&1; then
+  systemctl --user daemon-reload
+  if [ "$START_SERVICE" = "1" ]; then
+    systemctl --user enable hermes-kindle-dashboard.service >/dev/null
+    systemctl --user restart hermes-kindle-dashboard.service
+  fi
+else
+  echo "(no user systemd bus available; unit installed but not enabled)"
 fi
 
 echo "Host installed."
 echo "API: http://$BIND_HOST:$PORT/dashboard-data"
 echo "Kindle compatibility: http://$BIND_HOST:$PORT/dashboard.png"
-echo "Token: $TOKEN_FILE (not printed)"
-echo "Next: build the KUAL ZIP with scripts/build_kual_bundle.py --host <Kindle-reachable-host>"
+echo "Read token:    $TOKEN_FILE (not printed)"
+echo "Control token: $CONTROL_TOKEN_FILE (not printed)"
+echo "Next: build the KUAL ZIP:"
+echo "  python3 scripts/build_kual_bundle.py --host <Kindle-reachable-host> --inject-tokens"

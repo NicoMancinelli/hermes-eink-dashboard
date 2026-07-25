@@ -140,3 +140,30 @@ def test_post_install_script_replaces_placeholders(tmp_path: Path) -> None:
     assert 'DASHBOARD_TOKEN="tok"' in config_text
     assert 'CONTROL_TOKEN="ctrl"' in config_text
     assert 'PLACEHOLDER_TOKEN' not in config_text
+
+
+
+def test_host_installer_generates_control_token(tmp_path: Path) -> None:
+    """The installer must create ~/.config/.../control_token and wire it into host.env."""
+    subprocess.run(
+        [
+            "sh",
+            str(ROOT / "scripts/install_host.sh"),
+            "--bind", "127.0.0.1",
+            "--no-start",
+        ],
+        env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    config_dir = tmp_path / ".config/hermes-kindle-dashboard"
+    assert (config_dir / "token").exists()
+    assert (config_dir / "control_token").exists()
+    # The control token must be hex (we use secrets.token_hex(32) → 64 chars).
+    ctrl = (config_dir / "control_token").read_text().strip()
+    assert len(ctrl) == 64
+    int(ctrl, 16)  # parses as hex
+    env_text = (config_dir / "host.env").read_text()
+    assert "HERMES_DASHBOARD_CONTROL_TOKEN_FILE" in env_text
+    assert str(config_dir / "control_token") in env_text

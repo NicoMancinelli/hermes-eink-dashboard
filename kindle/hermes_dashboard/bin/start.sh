@@ -21,8 +21,8 @@ fi
 # shellcheck disable=SC1090
 . "$CONFIG"
 
-if [ -z "${DASHBOARD_URL:-}" ] || echo "$DASHBOARD_URL" | grep -q 'HOST_IP\|CHANGE_ME'; then
-  log "DASHBOARD_URL is not configured"
+if [ -z "${DASHBOARD_URL:-}" ] || echo "$DASHBOARD_URL" | grep -qE 'HOST_IP|CHANGE_ME|PLACEHOLDER'; then
+  log "DASHBOARD_URL is not configured (run bin/post_install.sh first)"
   eips 2 2 "Hermes Dashboard: edit config.sh" >/dev/null 2>&1 || true
   exit 1
 fi

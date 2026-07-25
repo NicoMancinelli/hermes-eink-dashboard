@@ -12,14 +12,23 @@ def api_setup(tmp_path):
 
     class _IsolatedManager(ConfigManager):
         def __init__(self):
-            super().__init__(
-                config_path=tmp_path / "config.yaml",
-                template_path=tmp_path / "config.sh.example",
-                output_path=tmp_path / "config.sh",
-            )
-        # The base template path is used only by load_template; copy it.
+            super().__init__(config_path=tmp_path / "config.yaml")
+            # Override the template path to use the test's tmp_path instead
+            # of walking up from the package.
+            self._template_override = tmp_path / "config.sh.example"
         def load_template(self):
-            return "HOST_IP=\"HOST_IP\"\nHOST_PORT=\"9120\"\nDASHBOARD_TOKEN=\"CHANGE_ME\"\nCONTROL_TOKEN=\"\"\nREFRESH_INTERVAL=\"45\"\nDOWNLOAD_TIMEOUT=\"12\"\nFULL_REFRESH_EVERY=\"10\"\nKEEP_AWAKE=\"1\"\nSTOP_FRAMEWORK=\"1\"\nFBINK=\"\"\n"
+            return (
+                "HOST_IP=\"HOST_IP\"\n"
+                "HOST_PORT=\"9120\"\n"
+                "DASHBOARD_TOKEN=\"CHANGE_ME\"\n"
+                "CONTROL_TOKEN=\"\"\n"
+                "REFRESH_INTERVAL=\"45\"\n"
+                "DOWNLOAD_TIMEOUT=\"12\"\n"
+                "FULL_REFRESH_EVERY=\"10\"\n"
+                "KEEP_AWAKE=\"1\"\n"
+                "STOP_FRAMEWORK=\"1\"\n"
+                "FBINK=\"\"\n"
+            )
 
     settings = ApiSettings(token="read-token-123", control_token="control-token-456")
     bus = ControlBus()

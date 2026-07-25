@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable, Iterable
 
 LOGGER = logging.getLogger("hermes-kindle-dashboard.actions")
@@ -35,6 +36,7 @@ class ActionRegistry:
         self,
         allowlist: Iterable[str] | None = None,
         rate_limit_seconds: float = 1.0,
+        max_workers: int = 4,
     ) -> None:
         self._lock = threading.Lock()
         self._allowed: set[str] = set(allowlist) if allowlist else set()
@@ -43,6 +45,14 @@ class ActionRegistry:
         self._handlers: dict[str, Callable[..., Any]] = {}
         self._nonces: dict[str, float] = {}
         self._last_executed: dict[str, float] = {}
+        # Handler invocations are dispatched to a thread pool so a slow
+        # workflow (up to its timeout) does not block the asyncio event loop.
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix="action-handler",
+        )
+        # Track in-flight futures so tests can synchronize via wait_for_pending().
+        self._pending: set[Future] = set()
 
     def register(
         self,
@@ -109,9 +119,17 @@ class ActionRegistry:
             self._last_executed[matched_key] = current_time
             handler = self._handlers.get(matched_key)
 
-        # Execute handler outside lock if present
+        # Execute handler outside the lock and inside the thread pool so a
+        # slow handler does not block the dispatch caller or other concurrent
+        # dispatches. Errors are logged but never propagated to the caller —
+        # the dispatch has already been validated and accepted.
         if handler is not None:
-            handler(tile_id=tile_id, action=action, nonce=nonce, ts=ts_float)
+            future: Future = self._executor.submit(
+                handler, tile_id=tile_id, action=action, nonce=nonce, ts=ts_float
+            )
+            with self._lock:
+                self._pending.add(future)
+            future.add_done_callback(self._drop_pending)
 
         LOGGER.info("action=%s result=ok tile_id=%s nonce=%s", action, tile_id, nonce)
         return {
@@ -120,3 +138,38 @@ class ActionRegistry:
             "nonce": nonce,
             "ts": ts_float,
         }
+
+    @staticmethod
+    def _log_handler_result(future: Future) -> None:
+        try:
+            future.result()
+        except Exception:
+            LOGGER.exception("action handler raised after dispatch")
+
+    def _drop_pending(self, future: Future) -> None:
+        with self._lock:
+            self._pending.discard(future)
+        self._log_handler_result(future)
+
+    def wait_for_pending(self, timeout: float = 30.0) -> None:
+        """Block until all currently-queued handler futures have completed.
+
+        Tests use this to synchronize with async handler execution.
+        Production code should not call this — handlers are meant to run in
+        the background without blocking the request loop.
+        """
+        import time as _time
+        deadline = _time.monotonic() + max(0.0, timeout)
+        while True:
+            with self._lock:
+                pending = list(self._pending)
+            if not pending:
+                return
+            remaining = deadline - _time.monotonic()
+            if remaining <= 0:
+                return
+            # Wait on the first pending future to avoid spinning.
+            try:
+                pending[0].result(timeout=remaining)
+            except Exception:
+                pass

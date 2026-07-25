@@ -6,7 +6,24 @@ The dashboard exposes operational metadata. Prefer the default localhost bind or
 
 `/dashboard-data` accepts bearer authentication only. Query-string authentication is limited to the deprecated Kindle compatibility routes because BusyBox `wget` support varies. Uvicorn access logging is disabled to keep those legacy URLs out of logs.
 
-The KUAL bundle contains the access token in `config.sh`. Treat generated ZIPs and the Kindle filesystem as sensitive. Rotate the token by replacing `~/.config/hermes-kindle-dashboard/token`, restarting the service, and rebuilding the KUAL bundle.
+The KUAL bundle has two build modes:
+
+- **Template mode** (default): the bundle contains placeholder values
+  (`HOST_IP=PLACEHOLDER.lan`, `DASHBOARD_TOKEN=PLACEHOLDER_TOKEN`). Safe to
+  publish as a release artifact. After installing on the Kindle, run
+  `bin/post_install.sh` to inject the real host and tokens.
+- **Personal mode** (`--inject-tokens`): the bundle contains the real
+  read and control tokens from `~/.config/hermes-kindle-dashboard/`.
+  Do NOT publish this artifact — anyone who downloads it can hit your
+  host's `/control` endpoints with write access.
+
+`bin/post_install.sh` writes the tokens to `config.sh` on the Kindle with
+`chmod 600`. The Kindle's filesystem is encrypted at rest on modern
+firmware, but treat it as sensitive.
+
+Rotate tokens by replacing `~/.config/hermes-kindle-dashboard/token` and
+`~/.config/hermes-kindle-dashboard/control_token`, restarting the service,
+and rebuilding + re-installing the KUAL bundle.
 
 ## Interactive controls security
 
@@ -18,6 +35,9 @@ Control endpoints (`POST /control`, `GET /control/events`) enforce a dual-token 
 - Config parser DoS is mitigated by capping `actions.yaml` at 1MB.
 - Error details are sanitized to generic error codes (`invalid_timestamp`, `invalid_nonce`, `invalid_payload`, `forbidden`, `rate_limited`) to prevent reflecting user-supplied input or internal exception tracebacks.
 - All HTTP responses enforce security headers: `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and `X-Frame-Options: DENY`.
+- Action handlers run in a `ThreadPoolExecutor` (4 workers) so a slow
+  workflow does not block the asyncio event loop or starve other
+  requests. Handlers have a 30s default timeout.
 
 ## Data minimization
 

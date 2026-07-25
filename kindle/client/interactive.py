@@ -25,6 +25,7 @@ import os
 import select
 import signal
 import struct
+import secrets
 import sys
 import time
 import urllib.error
