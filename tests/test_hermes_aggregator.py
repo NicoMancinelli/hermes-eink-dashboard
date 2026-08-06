@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from hermes_kindle_dashboard.aggregators.hermes import HermesAggregator, snapshot_to_panel
-from hermes_kindle_dashboard.state import DashboardSnapshot
+from hermes_eink_dashboard.aggregators.hermes import HermesAggregator, snapshot_to_panel
+from hermes_eink_dashboard.state import DashboardSnapshot
 from test_render import sample_snapshot
 
 

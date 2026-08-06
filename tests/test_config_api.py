@@ -1,14 +1,14 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from hermes_kindle_dashboard.actions import ActionRegistry
-from hermes_kindle_dashboard.api import ApiSettings, create_app
-from hermes_kindle_dashboard.scheduler import ControlBus
+from hermes_eink_dashboard.actions import ActionRegistry
+from hermes_eink_dashboard.api import ApiSettings, create_app
+from hermes_eink_dashboard.scheduler import ControlBus
 
 
 @pytest.fixture
 def api_setup(tmp_path):
-    from hermes_kindle_dashboard.config import ConfigManager
+    from hermes_eink_dashboard.config import ConfigManager
 
     class _IsolatedManager(ConfigManager):
         def __init__(self):

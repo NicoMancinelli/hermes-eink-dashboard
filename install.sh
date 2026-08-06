@@ -116,7 +116,7 @@ if [ "$INSTALL_SERVICE" != "1" ]; then
 Installed package, but skipped systemd service (--no-service).
 
 To start manually:
-  $VENV/bin/hermes-kindle-dashboard \\
+  $VENV/bin/hermes-eink-dashboard \\
     --bind $BIND_HOST --port $PORT --width $WIDTH --height $HEIGHT \\
     --context-limit $CONTEXT_LIMIT --refresh-seconds $REFRESH_SECONDS \\
     --hermes-home "$HERMES_HOME"
@@ -147,7 +147,7 @@ After=network-online.target
 Type=simple
 EnvironmentFile=%h/.config/hermes-eink-dashboard/host.env
 Environment=PYTHONPATH=
-ExecStart=%h/.local/share/hermes-eink-dashboard/venv/bin/hermes-kindle-dashboard
+ExecStart=%h/.local/share/hermes-eink-dashboard/venv/bin/hermes-eink-dashboard
 Restart=on-failure
 RestartSec=5
 

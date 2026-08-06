@@ -2,6 +2,13 @@
 
 A standalone, read-only local dashboard gateway for [Hermes Agent](https://github.com/NousResearch/hermes-agent). It runs beside Hermes, refreshes sanitized state independently of HTTP requests, and exposes a versioned JSON contract for device-side E-Ink renderers. The original Kindle PNG client remains available as a compatibility adapter.
 
+> **This is the single, canonical repo.** The former `hermes-kindle-dashboard`
+> repo has been consolidated here — Kindle is now one adapter behind a
+> device-neutral contract, not a separate project. The Python package was
+> renamed `hermes_kindle_dashboard` → `hermes_eink_dashboard`; the old import
+> path and the `hermes-kindle-dashboard` console command still work as
+> deprecated aliases. See [`CONSOLIDATION.md`](CONSOLIDATION.md).
+
 ## One-liner install (Linux host)
 
 ```bash
@@ -81,7 +88,7 @@ kindle/hermes_dashboard/     KUAL extension source
   config.xml
   config.sh.example
   bin/{start,fetch,refresh,stop}.sh
-src/hermes_kindle_dashboard/
+src/hermes_eink_dashboard/
   aggregators/              independent panel providers
   contract.py               versioned device-neutral panel cache
   scheduler.py              serial refresh loops and backoff
@@ -250,12 +257,12 @@ python3 -m venv .venv
 .venv/bin/pytest
 
 # Render from live Hermes state without starting HTTP.
-.venv/bin/hermes-kindle-dashboard \
+.venv/bin/hermes-eink-dashboard \
   --render-once /tmp/hermes-dashboard.png --width 600 --height 800
 
 # Local-only HTTP server.
 TOKEN=development-only
-.venv/bin/hermes-kindle-dashboard --host 127.0.0.1 --port 9120 --token "$TOKEN"
+.venv/bin/hermes-eink-dashboard --host 127.0.0.1 --port 9120 --token "$TOKEN"
 ```
 
 ## HTTP API

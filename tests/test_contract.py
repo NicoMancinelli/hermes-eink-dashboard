@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from hermes_kindle_dashboard.contract import PanelCache
+from hermes_eink_dashboard.contract import PanelCache
 
 
 class Clock:
@@ -102,7 +102,7 @@ def test_panel_names_must_be_safe_identifiers() -> None:
 
 
 def test_tile_dataclass_to_dict_and_from_dict() -> None:
-    from hermes_kindle_dashboard.contract import Tile
+    from hermes_eink_dashboard.contract import Tile
 
     tile = Tile(
         id="wf:briefing",
@@ -132,7 +132,7 @@ def test_tile_dataclass_to_dict_and_from_dict() -> None:
 
 
 def test_dashboard_json_returns_schema_v2_payload() -> None:
-    from hermes_kindle_dashboard.contract import Tile, dashboard_json
+    from hermes_eink_dashboard.contract import Tile, dashboard_json
 
     layout = {
         "columns": 4,

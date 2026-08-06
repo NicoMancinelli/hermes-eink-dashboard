@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 
 from PIL import Image
 
-from hermes_kindle_dashboard.render import RenderOptions, render_dashboard
-from hermes_kindle_dashboard.state import (
+from hermes_eink_dashboard.render import RenderOptions, render_dashboard
+from hermes_eink_dashboard.state import (
     DashboardSnapshot,
     MemoryState,
     SessionState,
@@ -62,7 +62,7 @@ def test_render_can_save_png(tmp_path) -> None:
 
 
 def test_build_default_layout() -> None:
-    from hermes_kindle_dashboard.contract import build_default_layout
+    from hermes_eink_dashboard.contract import build_default_layout
 
     layout = build_default_layout(1072, 1448, panels=("hermes",))
     assert layout["schema_version"] == 2
@@ -90,8 +90,8 @@ def test_build_default_layout() -> None:
 
 def test_render_layout_dashboard_focus_border_presence() -> None:
     import hashlib
-    from hermes_kindle_dashboard.contract import build_default_layout
-    from hermes_kindle_dashboard.render import render_layout_dashboard
+    from hermes_eink_dashboard.contract import build_default_layout
+    from hermes_eink_dashboard.render import render_layout_dashboard
 
     layout = build_default_layout(1072, 1448)
     snapshot = sample_snapshot()
@@ -115,8 +115,8 @@ def test_render_layout_dashboard_focus_border_presence() -> None:
 
 def test_render_layout_dashboard_label_and_panel_preview() -> None:
     import hashlib
-    from hermes_kindle_dashboard.contract import build_default_layout
-    from hermes_kindle_dashboard.render import render_layout_dashboard
+    from hermes_eink_dashboard.contract import build_default_layout
+    from hermes_eink_dashboard.render import render_layout_dashboard
 
     layout = build_default_layout(1072, 1448)
     snapshot = sample_snapshot()
@@ -132,7 +132,7 @@ def test_render_layout_dashboard_label_and_panel_preview() -> None:
 
 
 def test_parse_layout_yaml() -> None:
-    from hermes_kindle_dashboard.server import parse_layout_yaml
+    from hermes_eink_dashboard.server import parse_layout_yaml
 
     yaml_text = """
 columns: 4
@@ -167,8 +167,8 @@ tiles:
 
 def test_render_layout_dashboard_label_variations() -> None:
     import hashlib
-    from hermes_kindle_dashboard.contract import Tile, dashboard_json
-    from hermes_kindle_dashboard.render import render_layout_dashboard
+    from hermes_eink_dashboard.contract import Tile, dashboard_json
+    from hermes_eink_dashboard.render import render_layout_dashboard
 
     layout1 = dashboard_json({
         "columns": 2,
@@ -192,8 +192,8 @@ def test_render_layout_dashboard_label_variations() -> None:
 
 def test_render_layout_dashboard_panel_preview_with_and_without_snapshot() -> None:
     import hashlib
-    from hermes_kindle_dashboard.contract import Tile, dashboard_json
-    from hermes_kindle_dashboard.render import render_layout_dashboard
+    from hermes_eink_dashboard.contract import Tile, dashboard_json
+    from hermes_eink_dashboard.render import render_layout_dashboard
 
     layout = dashboard_json({
         "columns": 2,
