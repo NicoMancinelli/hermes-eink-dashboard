@@ -26,10 +26,10 @@ from pathlib import Path
 import pytest
 import uvicorn
 
-from hermes_kindle_dashboard.actions import ActionRegistry
-from hermes_kindle_dashboard.api import ApiSettings, create_app
-from hermes_kindle_dashboard.contract import PanelCache, build_default_layout
-from hermes_kindle_dashboard.scheduler import ControlBus
+from hermes_eink_dashboard.actions import ActionRegistry
+from hermes_eink_dashboard.api import ApiSettings, create_app
+from hermes_eink_dashboard.contract import PanelCache, build_default_layout
+from hermes_eink_dashboard.scheduler import ControlBus
 
 from kindle.client.interactive import (
     BusClient,

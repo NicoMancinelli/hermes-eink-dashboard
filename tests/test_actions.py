@@ -1,7 +1,7 @@
 import time
 import pytest
 
-from hermes_kindle_dashboard.actions import (
+from hermes_eink_dashboard.actions import (
     ActionError,
     ActionRegistry,
     InvalidNonceError,

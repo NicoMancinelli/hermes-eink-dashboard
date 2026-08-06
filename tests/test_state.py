@@ -2,7 +2,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from hermes_kindle_dashboard.state import DashboardConfig, HermesStateCollector
+from hermes_eink_dashboard.state import DashboardConfig, HermesStateCollector
 
 
 def create_db(path: Path, statements: list[str]) -> None:
