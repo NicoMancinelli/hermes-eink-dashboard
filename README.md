@@ -51,7 +51,7 @@ python3 scripts/build_kual_bundle.py --output dist/hermes-dashboard-kual.zip
 For personal/dev builds that embed real tokens directly (do NOT publish these):
 
 ```bash
-python3 scripts/build_kual_bundle.py   --inject-tokens   --host 192.168.1.42   --token-file ~/.config/hermes-kindle-dashboard/token
+python3 scripts/build_kual_bundle.py   --inject-tokens   --host 192.168.1.42   --token-file ~/.config/hermes-eink-dashboard/token
 ```
 
 ## What it shows
@@ -158,11 +158,11 @@ cd hermes-eink-dashboard
 
 The installer creates:
 
-- isolated venv: `~/.local/share/hermes-kindle-dashboard/venv`
-- private config: `~/.config/hermes-kindle-dashboard/host.env`
-- private random read token: `~/.config/hermes-kindle-dashboard/token`
-- private random control token: `~/.config/hermes-kindle-dashboard/control_token`
-- user service: `~/.config/systemd/user/hermes-kindle-dashboard.service`
+- isolated venv: `~/.local/share/hermes-eink-dashboard/venv`
+- private config: `~/.config/hermes-eink-dashboard/host.env`
+- private random read token: `~/.config/hermes-eink-dashboard/token`
+- private random control token: `~/.config/hermes-eink-dashboard/control_token`
+- user service: `~/.config/systemd/user/hermes-eink-dashboard.service`
 
 The control token enables `POST /control`, `GET /control/events`,
 `GET /config`, and `POST /config`. Without it, those endpoints return
@@ -174,9 +174,9 @@ access). The KUAL bundle for your Kindle can either embed both tokens
 Verify it without exposing the token:
 
 ```sh
-systemctl --user status hermes-kindle-dashboard
+systemctl --user status hermes-eink-dashboard
 curl -fsS http://192.168.1.50:9120/healthz
-TOKEN=$(cat ~/.config/hermes-kindle-dashboard/token)
+TOKEN=$(cat ~/.config/hermes-eink-dashboard/token)
 curl -fsS -H "Authorization: Bearer $TOKEN" \
   http://192.168.1.50:9120/dashboard-data -o /tmp/dashboard-data.json
 curl -fsS "http://192.168.1.50:9120/dashboard.png?token=$TOKEN" \
@@ -207,8 +207,8 @@ python3 scripts/build_kual_bundle.py \
   --inject-tokens \
   --host 192.168.1.50 \
   --port 9120 \
-  --token-file ~/.config/hermes-kindle-dashboard/token \
-  --control-token-file ~/.config/hermes-kindle-dashboard/control_token \
+  --token-file ~/.config/hermes-eink-dashboard/token \
+  --control-token-file ~/.config/hermes-eink-dashboard/control_token \
   --output dist/hermes-dashboard-kual-personal.zip
 ```
 
@@ -328,7 +328,7 @@ The host-side interactive layer is in place:
 - `--focus-tile` / `focus_tile_id` query parameter on `/dashboard.png`
   highlights the focused tile in the rendered PNG.
 - Declarative `/config` endpoint lets the host push KUAL config changes
-  to `~/.config/hermes-kindle-dashboard/config.yaml`.
+  to `~/.config/hermes-eink-dashboard/config.yaml`.
 
 **Requirements for the interactive client on the Kindle**: Python 3 (install
 via `mrpackage` if not already present). The legacy read-only `fetch.sh`
@@ -383,7 +383,7 @@ See [SECURITY.md](SECURITY.md) for reporting and deployment guidance.
 ## Troubleshooting
 
 ```sh
-journalctl --user -u hermes-kindle-dashboard -n 100 --no-pager
+journalctl --user -u hermes-eink-dashboard -n 100 --no-pager
 curl -v http://HOST:9120/healthz
 ```
 

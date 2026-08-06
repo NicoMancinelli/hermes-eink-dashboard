@@ -6,9 +6,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=%h/.config/hermes-kindle-dashboard/host.env
+EnvironmentFile=%h/.config/hermes-eink-dashboard/host.env
 Environment=PYTHONPATH=
-ExecStart=%h/.local/share/hermes-kindle-dashboard/venv/bin/hermes-kindle-dashboard
+ExecStart=%h/.local/share/hermes-eink-dashboard/venv/bin/hermes-eink-dashboard
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

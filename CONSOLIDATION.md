@@ -59,12 +59,12 @@ because the sandbox blocks the real `pip install` the installer performs
 These were left out on purpose to avoid breaking existing installs and to keep
 this change reviewable. Each is a separate, opt-in migration:
 
-- **Runtime paths & unit name.** `install_host.sh` still writes
-  `~/.config/hermes-kindle-dashboard/`, `~/.local/share/hermes-kindle-dashboard/`
-  and the `hermes-kindle-dashboard` service. (Note: `install.sh` already uses
-  `hermes-eink-dashboard` dirs — the two installers are inconsistent and should
-  be reconciled.) Renaming runtime dirs needs a migration that moves existing
-  users' tokens/config; do it with a shim, then update `tests/test_ops.py`.
+- **Runtime paths & unit name.** _Done in a follow-up PR._ `install_host.sh`,
+  the systemd unit, and `uninstall_host.sh` now use `hermes-eink-dashboard`
+  paths/service (matching `install.sh`), and the installer migrates an existing
+  `~/.config/hermes-kindle-dashboard/` install (preserving tokens) and removes
+  the old user service. Covered by
+  `tests/test_ops.py::test_host_installer_migrates_pre_consolidation_config`.
 - **Logger names.** Internal loggers still log as `hermes-kindle-dashboard.*`
   (cosmetic).
 - **Remove the deprecated aliases.** After a deprecation window, drop
