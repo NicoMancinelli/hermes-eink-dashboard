@@ -44,13 +44,33 @@ if [ "$WIDTH" -lt 320 ] || [ "$HEIGHT" -lt 480 ]; then echo "Display must be at 
 if [ "$CONTEXT_LIMIT" -lt 1 ]; then echo "Context limit must be positive" >&2; exit 2; fi
 if [ "$REFRESH_SECONDS" -lt 1 ]; then echo "Refresh interval must be positive" >&2; exit 2; fi
 
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-kindle-dashboard"
-DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/hermes-kindle-dashboard"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-eink-dashboard"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/hermes-eink-dashboard"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 TOKEN_FILE="$CONFIG_DIR/token"
 CONTROL_TOKEN_FILE="$CONFIG_DIR/control_token"
 ENV_FILE="$CONFIG_DIR/host.env"
 VENV="$DATA_DIR/venv"
+
+# Migrate a pre-consolidation install (hermes-kindle-dashboard -> hermes-eink-dashboard).
+# The config dir holds the tokens/host.env and is the only precious state; the
+# data dir is just a disposable venv that is recreated below at the new path.
+OLD_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-kindle-dashboard"
+OLD_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/hermes-kindle-dashboard"
+OLD_UNIT="$UNIT_DIR/hermes-kindle-dashboard.service"
+if [ -d "$OLD_CONFIG_DIR" ] && [ ! -e "$CONFIG_DIR" ]; then
+  echo "Migrating config: $OLD_CONFIG_DIR -> $CONFIG_DIR"
+  mv "$OLD_CONFIG_DIR" "$CONFIG_DIR"
+fi
+if [ -f "$OLD_UNIT" ]; then
+  if systemctl --user >/dev/null 2>&1; then
+    systemctl --user disable --now hermes-kindle-dashboard.service >/dev/null 2>&1 || true
+  fi
+  rm -f "$OLD_UNIT"
+fi
+if [ -d "$OLD_DATA_DIR" ]; then
+  echo "Note: leaving stale venv at $OLD_DATA_DIR (safe to delete)."
+fi
 
 mkdir -p "$CONFIG_DIR" "$DATA_DIR" "$UNIT_DIR"
 chmod 700 "$CONFIG_DIR"
@@ -83,15 +103,15 @@ HERMES_DASHBOARD_CONTROL_TOKEN_FILE=$CONTROL_TOKEN_FILE
 HERMES_HOME=$HOME/.hermes
 EOF
 chmod 600 "$ENV_FILE"
-install -m 0644 "$ROOT/systemd/hermes-kindle-dashboard.service" "$UNIT_DIR/hermes-kindle-dashboard.service"
+install -m 0644 "$ROOT/systemd/hermes-eink-dashboard.service" "$UNIT_DIR/hermes-eink-dashboard.service"
 
 # Skip systemd integration when running in a chroot/test environment without
 # a user bus. Detected by trying systemctl and falling back gracefully.
 if systemctl --user >/dev/null 2>&1; then
   systemctl --user daemon-reload
   if [ "$START_SERVICE" = "1" ]; then
-    systemctl --user enable hermes-kindle-dashboard.service >/dev/null
-    systemctl --user restart hermes-kindle-dashboard.service
+    systemctl --user enable hermes-eink-dashboard.service >/dev/null
+    systemctl --user restart hermes-eink-dashboard.service
   fi
 else
   echo "(no user systemd bus available; unit installed but not enabled)"
