@@ -23,6 +23,7 @@ from collections.abc import Callable
 from .aggregators.base import Aggregator
 from .config import ConfigManager, ConfigSchema
 from .contract import PanelCache, build_default_layout, dashboard_json
+from .pairing import PairingService, PairingValidationError
 from .render import RenderOptions, render_dashboard, render_layout_dashboard
 from .scheduler import ControlBus, collect_once, run_aggregator_loop
 from .state import DashboardSnapshot
@@ -35,6 +36,7 @@ class ApiSettings:
     width: int = 1072
     height: int = 1448
     bit_depth: int = 1
+    pairing: PairingService | None = None
 
 
 def _authorized(request: Request, expected: str, *, allow_query: bool) -> bool:
@@ -60,6 +62,17 @@ def _require_control_auth(request: Request, settings: ApiSettings) -> None:
         )
     if not _authorized(request, settings.control_token, allow_query=False):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized")
+
+
+async def _json_body(request: Request) -> dict[str, Any]:
+    """Parse a JSON object body; raise 400 invalid_payload otherwise."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+    return body
 
 
 def _legacy_snapshot(payload: dict[str, Any]) -> DashboardSnapshot:
@@ -241,6 +254,72 @@ def create_app(
         effective_timeout = min(max(0.0, float(timeout)), 30.0)
         event = await control_bus.wait_for_event(timeout=effective_timeout)
         return JSONResponse({"event": event})
+
+    # ------------------------------------------------------------- pairing
+    @app.get("/pair/devices")
+    async def get_pair_devices(request: Request) -> JSONResponse:
+        """List pending/approved devices (admin only; no secrets returned)."""
+        _require_control_auth(request, settings)
+        if settings.pairing is None:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable")
+        return JSONResponse({"devices": settings.pairing.list_devices()})
+
+    @app.post("/pair/approve")
+    async def post_pair_approve(request: Request) -> JSONResponse:
+        """Approve a pending device (by device_id or display code)."""
+        _require_control_auth(request, settings)
+        if settings.pairing is None:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable")
+        body = await _json_body(request)
+        try:
+            record = settings.pairing.approve(str(body.get("device", "")))
+        except PairingValidationError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+        if record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown_device")
+        return JSONResponse({"status": "ok", "device": record.public_view()})
+
+    @app.post("/pair/deny")
+    async def post_pair_deny(request: Request) -> JSONResponse:
+        """Remove a pending or approved device."""
+        _require_control_auth(request, settings)
+        if settings.pairing is None:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable")
+        body = await _json_body(request)
+        try:
+            removed = settings.pairing.deny(str(body.get("device", "")))
+        except PairingValidationError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+        if not removed:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown_device")
+        return JSONResponse({"status": "ok"})
+
+    @app.post("/pair/poll")
+    async def post_pair_poll(request: Request) -> JSONResponse:
+        """Unauthenticated device-flow poll; see hermes_kindle_dashboard.pairing."""
+        if settings.pairing is None:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable")
+        body = await _json_body(request)
+        try:
+            result = settings.pairing.poll(
+                body.get("device_id"),
+                body.get("device_secret"),
+                body.get("name"),
+            )
+        except PairingValidationError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+        if result.status == "forbidden":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+        if result.status == "rate_limited":
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="rate_limited")
+        if result.status == "pending":
+            return JSONResponse({"status": "pending"})
+        return JSONResponse({
+            "status": "approved",
+            "read_token": result.read_token,
+            "control_token": result.control_token,
+            "device_name": result.name,
+        })
 
     @app.get("/config")
     async def get_config(request: Request) -> JSONResponse:

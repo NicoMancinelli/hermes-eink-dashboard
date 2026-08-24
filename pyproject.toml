@@ -35,6 +35,7 @@ dev = ["httpx>=0.27", "pytest>=8.0"]
 
 [project.scripts]
 hermes-kindle-dashboard = "hermes_kindle_dashboard.server:main"
+hermes-dashboard-pair = "hermes_kindle_dashboard.pair_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src", "kindle"]

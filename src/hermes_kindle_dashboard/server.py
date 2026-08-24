@@ -15,6 +15,7 @@ from .actions_runtime import register_all_actions
 from .aggregators.hermes import HermesAggregator
 from .api import ApiSettings, create_app
 from .contract import build_default_layout
+from .pairing import DeviceStore, PairingService
 from .render import RenderOptions, render_dashboard, render_layout_dashboard
 from .scheduler import ControlBus, collect_once
 from .state import DashboardConfig, HermesStateCollector
@@ -92,6 +93,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path(os.getenv("HERMES_DASHBOARD_CONTROL_TOKEN_FILE", "~/.config/hermes-kindle-dashboard/control_token")).expanduser(),
     )
     parser.add_argument("--layout-yaml", type=Path, help="path to layout YAML file to override default layout")
+    parser.add_argument(
+        "--devices-file",
+        type=Path,
+        default=Path(os.getenv("HERMES_DASHBOARD_DEVICES_FILE", "~/.config/hermes-kindle-dashboard/devices.json")).expanduser(),
+        help="where paired device records are stored (mode 0600)",
+    )
+    parser.add_argument(
+        "--no-pairing",
+        action="store_true",
+        help="disable the device pairing endpoints (/pair/*)",
+    )
     parser.add_argument("--insecure", action="store_true", help="allow unauthenticated access")
     parser.add_argument("--render-once", type=Path, help="write one PNG and exit")
     parser.add_argument("--verbose", action="store_true")
@@ -146,6 +158,7 @@ def main(argv: list[str] | None = None) -> int:
 
     bus = ControlBus()
     registry = ActionRegistry()
+    pairing = None if args.no_pairing else PairingService(DeviceStore(args.devices_file))
 
     actions_dir_str = os.getenv("HERMES_DASHBOARD_ACTIONS_DIR", "~/.config/hermes-kindle-dashboard")
     actions_dir = Path(actions_dir_str).expanduser()
@@ -158,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
             width=args.width,
             height=args.height,
             bit_depth=args.bit_depth,
+            pairing=pairing,
         ),
         [HermesAggregator(collector=collector, interval_seconds=args.refresh_seconds)],
         bus=bus,
