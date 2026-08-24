@@ -374,6 +374,114 @@ class CombinedSource:
                     return event
 
 
+class TransientNetworkError(Exception):
+    """Raised when every retry of a network operation failed transiently."""
+
+
+def _is_transient(error: BaseException) -> bool:
+    """Classify whether an exception is worth retrying.
+
+    4xx responses mean configuration/auth problems that will not heal by
+    themselves, so they are fatal; 5xx and everything connection-shaped
+    (URLError, timeouts, refused, DNS) are transient.
+    """
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code >= 500
+    if isinstance(error, urllib.error.URLError):
+        return True
+    return isinstance(error, (TimeoutError, ConnectionError, OSError))
+
+
+class FbinkPainter:
+    """Blits the dashboard PNG to the e-ink framebuffer via FBInk.
+
+    Mirrors bin/fetch.sh conventions: same fbink discovery order, GC16
+    waveform, full flash on first paint and every N-th paint, and the
+    two-tier offline message with font fallback. The interactive client
+    owns its display loop in-process instead of relying on the legacy
+    fetch shell loop.
+    """
+
+    def __init__(
+        self,
+        enabled: bool = True,
+        fbink_path: str = "",
+        full_refresh_every: int = 10,
+        runner=None,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        import shutil
+        import subprocess
+
+        self.enabled = enabled
+        self.full_refresh_every = max(1, int(full_refresh_every))
+        self._runner = runner or subprocess.run
+        self.logger = logger or LOGGER
+        self._paint_count = 0
+        self._fbink = fbink_path if enabled else ""
+        if enabled and not self._fbink:
+            self._fbink = self._locate_fbink(shutil)
+        if enabled and not self._fbink:
+            self.logger.warning("FBInk not found; client runs headless (PNG only)")
+
+    @staticmethod
+    def _locate_fbink(shutil) -> str:
+        candidates = (
+            "/mnt/us/extensions/FBInk/bin/fbink",
+            "/mnt/us/extensions/fbink/bin/fbink",
+            "/usr/bin/fbink",
+        )
+        for candidate in candidates:
+            if os.path.exists(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+        return shutil.which("fbink") or ""
+
+    @property
+    def active(self) -> bool:
+        return bool(self.enabled and self._fbink)
+
+    def _run_fbink(self, argv: list[str]) -> bool:
+        import subprocess
+
+        try:
+            result = self._runner([self._fbink, "-q", *argv], capture_output=True, timeout=30)
+            return getattr(result, "returncode", 1) == 0
+        except Exception:
+            self.logger.exception("fbink invocation failed")
+            return False
+
+    def paint(self, image_path: str) -> bool:
+        """Display the PNG. Full flash on first paint and every N-th."""
+        if not self.active:
+            return False
+        self._paint_count += 1
+        argv = ["-c"]
+        flashes = self._paint_count == 1 or (
+            self._paint_count > 1 and (self._paint_count - 1) % self.full_refresh_every == 0
+        )
+        if flashes:
+            argv.append("-f")
+        argv += ["-g", f"file={image_path},halign=CENTER,valign=CENTER,w=-1,h=-1", "-W", "GC16"]
+        return self._run_fbink(argv)
+
+    def show_offline(self) -> bool:
+        """Full-screen offline notice (same text/tiers as fetch.sh)."""
+        if not self.active:
+            return False
+        regular = "/usr/java/lib/fonts/Caecilia_LT_65_Medium.ttf"
+        bold = "/usr/java/lib/fonts/Caecilia_LT_75_Bold.ttf"
+        formatted = "**HERMES DASHBOARD OFFLINE**\nCannot reach host. Retrying automatically."
+        plain = "HERMES DASHBOARD OFFLINE\nCannot reach host. Retrying automatically."
+        if os.path.exists(regular):
+            font_spec = f"regular={regular}"
+            if os.path.exists(bold):
+                font_spec += f",bold={bold}"
+            if self._run_fbink(["-c", "-f", "-m", "-M", "-t", f"{font_spec},size=24,left=35,right=35,format", formatted]):
+                return True
+        return self._run_fbink(["-c", "-f", "-m", "-M", "-S", "2", plain])
+
+
+
 class BusClient:
     """Thin HTTP client for the dashboard host. Uses stdlib only."""
 
@@ -451,15 +559,61 @@ class DashboardClient:
         image_path: str,
         refresh_seconds: float = 15.0,
         event_poll_seconds: float = 0.5,
+        painter: "FbinkPainter | None" = None,
+        retry_attempts: int = 3,
+        retry_backoff: float = 1.0,
     ) -> None:
         self._bus = bus
         self._source = source
         self._image_path = image_path
         self._refresh_seconds = max(0.5, refresh_seconds)
         self._event_poll_seconds = max(0.1, event_poll_seconds)
+        self._painter = painter
+        self._retry_attempts = max(1, int(retry_attempts))
+        self._retry_backoff = max(0.0, float(retry_backoff))
         self._stop = False
         self._layout: Layout | None = None
         self._focus_tile_id: str = ""
+        self.offline_reason: str = ""
+
+    # Injectable for tests.
+    _sleep = staticmethod(time.sleep)
+
+    def _attempt(self, operation):
+        """Run a network operation with bounded retries on transient errors.
+
+        Non-transient errors (e.g. HTTP 401) propagate immediately: retrying
+        a configuration problem forever is worse than failing fast.
+        """
+        last_error: BaseException | None = None
+        for attempt in range(self._retry_attempts):
+            try:
+                return operation()
+            except Exception as error:
+                if not _is_transient(error):
+                    raise
+                last_error = error
+                if attempt < self._retry_attempts - 1:
+                    delay = self._retry_backoff * (2 ** attempt)
+                    LOGGER.warning("transient network error (%s); retry %d/%d in %.1fs",
+                                   error, attempt + 1, self._retry_attempts, delay)
+                    self._sleep(delay)
+        raise TransientNetworkError(str(last_error)) from last_error
+
+    def _enter_offline(self, reason: str) -> None:
+        if not self.offline_reason:
+            LOGGER.error("going offline: %s", reason)
+            if self._painter is not None:
+                self._painter.show_offline()
+        else:
+            LOGGER.debug("still offline: %s", reason)
+        self.offline_reason = reason
+
+    def _exit_offline(self) -> None:
+        was_offline = bool(self.offline_reason)
+        self.offline_reason = ""
+        if was_offline:
+            LOGGER.info("connection recovered")
 
     def stop(self) -> None:
         self._stop = True
@@ -510,10 +664,28 @@ class DashboardClient:
         if target and target != self._focus_tile_id:
             self._focus_tile_id = target
 
+    def _refresh_display(self) -> None:
+        """Fetch layout+PNG and paint. Raises TransientNetworkError when offline."""
+        self._attempt(self._refresh_layout)
+        self._attempt(self._refresh_png)
+        if self._painter is not None:
+            self._painter.paint(self._image_path)
+
     def run(self) -> None:
-        """Run the client loop until stop() is called."""
-        self._refresh_layout()
-        self._refresh_png()
+        """Run the client loop until stop() is called.
+
+        Network failures never escape the loop: transient errors flip the
+        client into an offline state (one offline screen, then silent retry
+        pacing); recovery repaints immediately and keeps focus/layout.
+        """
+        try:
+            self._refresh_display()
+        except TransientNetworkError as error:
+            self._enter_offline(str(error))
+        except urllib.error.HTTPError as error:
+            LOGGER.error("fatal configuration error (HTTP %d); stopping", error.code)
+            self.stop()
+            return 1
         last_refresh = time.monotonic()
         while not self._stop:
             event = self._source.next_event(self._event_poll_seconds)
@@ -526,11 +698,27 @@ class DashboardClient:
                 elif event.kind == "activate":
                     self._dispatch()
                 # Always refresh the PNG after an input event so the focus border updates.
-                self._refresh_png()
+                try:
+                    self._refresh_display()
+                    self._exit_offline()
+                except TransientNetworkError as error:
+                    self._enter_offline(str(error))
+                except urllib.error.HTTPError as error:
+                    LOGGER.error("fatal configuration error (HTTP %d); stopping", error.code)
+                    self.stop()
+                    return 1
                 last_refresh = time.monotonic()
                 continue
             if time.monotonic() - last_refresh >= self._refresh_seconds:
-                self._refresh_png()
+                try:
+                    self._refresh_display()
+                    self._exit_offline()
+                except TransientNetworkError as error:
+                    self._enter_offline(str(error))
+                except urllib.error.HTTPError as error:
+                    LOGGER.error("fatal configuration error (HTTP %d); stopping", error.code)
+                    self.stop()
+                    return 1
                 last_refresh = time.monotonic()
 
 
@@ -546,6 +734,15 @@ def _build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--touch-device", default="/dev/input/event1", help="Touchscreen device. Empty to disable touch.")
     parser.add_argument("--touch-device-size", default="", help="WxH of the touch device in pixels (e.g. 1072x1448). Empty = no rescale.")
     parser.add_argument("--mock-events", default="", help="JSON list of InputEvent dicts for harness testing")
+    parser.add_argument(
+        "--no-fbink",
+        action="store_true",
+        help="do not blit to the framebuffer (PNG is still written; useful in harnesses)",
+    )
+    parser.add_argument("--fbink-path", default="", help="explicit path to the fbink binary")
+    parser.add_argument("--full-refresh-every", type=int, default=10, help="full e-ink flash every N paints")
+    parser.add_argument("--retry-attempts", type=int, default=3, help="network retries per refresh before going offline")
+    parser.add_argument("--retry-backoff", type=float, default=1.0, help="base backoff seconds between retries (exponential)")
     parser.add_argument("--verbose", "-v", action="store_true")
     return parser
 
@@ -592,16 +789,26 @@ def main(argv: list[str] | None = None) -> int:
     else:
         source = FiveWaySource(args.input_device)
 
+    painter = None
+    if not args.no_fbink:
+        painter = FbinkPainter(
+            enabled=True,
+            fbink_path=args.fbink_path,
+            full_refresh_every=args.full_refresh_every,
+        )
+
     client = DashboardClient(
         bus=bus,
         source=source,
         image_path=args.image,
         refresh_seconds=args.refresh_seconds,
+        painter=painter,
+        retry_attempts=args.retry_attempts,
+        retry_backoff=args.retry_backoff,
     )
 
     _install_signal_handlers(client)
-    client.run()
-    return 0
+    return int(client.run() or 0)
 
 
 if __name__ == "__main__":

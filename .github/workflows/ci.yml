@@ -23,3 +23,11 @@ jobs:
       - run: pytest
       - name: ShellCheck
         run: shellcheck -s sh kindle/hermes_dashboard/bin/*.sh scripts/*.sh
+      - name: Build template KUAL bundle artifact (main only)
+        if: github.ref == 'refs/heads/main' && matrix.python-version == '3.12'
+        run: python3 scripts/build_kual_bundle.py --output dist/hermes-dashboard-kual-main.zip
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main' && matrix.python-version == '3.12'
+        with:
+          name: hermes-dashboard-kual-main
+          path: dist/hermes-dashboard-kual-main.zip

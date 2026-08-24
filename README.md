@@ -2,6 +2,12 @@
 
 A standalone, read-only local dashboard gateway for [Hermes Agent](https://github.com/NousResearch/hermes-agent). It runs beside Hermes, refreshes sanitized state independently of HTTP requests, and exposes a versioned JSON contract for device-side E-Ink renderers. The original Kindle PNG client remains available as a compatibility adapter.
 
+| Paperwhite-class (1072×1448) | Classic Kindle (600×800) |
+|---|---|
+| ![Paperwhite dashboard render](docs/screenshots/dashboard-paperwhite.png) | ![Classic Kindle dashboard render](docs/screenshots/dashboard-classic.png) |
+
+*Rendered from synthetic sample data via `--render-once` — tiles on top are live action buttons (refresh, dismissals, Hermes prompts/models when configured).*
+
 ## One-liner install (Linux host)
 
 ```bash
