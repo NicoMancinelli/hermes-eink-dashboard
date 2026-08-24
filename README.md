@@ -29,6 +29,31 @@ systemctl --user status hermes-eink-dashboard
 curl -fsSL http://127.0.0.1:9120/healthz
 ```
 
+## Pair a Kindle in three steps (no tokens to copy)
+
+1. **Kindle**: grab the latest KUAL bundle from
+   [Releases](https://github.com/NicoMancinelli/hermes-eink-dashboard/releases),
+   unzip it so the path is `/mnt/us/extensions/hermes_dashboard/menu.json`,
+   then open KUAL → **Hermes Dashboard → Setup Wizard (pair Kindle)**.
+2. The wizard finds your host on the LAN automatically (UDP discovery) and
+   shows a short code such as `AB12-CD34` on the screen.
+3. **Host**: run
+
+   ```bash
+   hermes-dashboard-pair approve AB12-CD34
+   ```
+
+The device receives its own read/control tokens over the local network,
+writes them into `config.sh` itself, and is ready to start. Nothing is ever
+typed on the Kindle, and no secret is copied by hand. `hermes-dashboard-pair
+list` shows pending/paired devices; `deny` revokes one.
+
+Requirements for step 1: jailbreak + KUAL + FBInk. The wizard and interactive
+client need Python 3; if it is missing, the launcher offers to install it via
+`mrpackage install kindle-python3` automatically (disable with
+`AUTO_INSTALL_PYTHON=0` in `config.sh`). The read-only PNG dashboard works
+without Python.
+
 Then build the Kindle bundle and copy it to the device:
 
 ```bash
@@ -81,6 +106,9 @@ kindle/hermes_dashboard/     KUAL extension source
   config.xml
   config.sh.example
   bin/{start,fetch,refresh,stop}.sh
+  bin/start_wizard.sh         pairing wizard launcher
+  client/setup_wizard.py      zero-typing first-run wizard (discovery+pairing)
+  client/interactive.py       interactive tile client (5-way + touch)
 src/hermes_kindle_dashboard/
   aggregators/              independent panel providers
   contract.py               versioned device-neutral panel cache
@@ -88,6 +116,9 @@ src/hermes_kindle_dashboard/
   state.py                   read-only Hermes state collector
   render.py                  responsive E-Ink renderer
   api.py                     FastAPI service and compatibility routes
+  pairing.py                 device store + OAuth-device-flow pairing service
+  pair_cli.py                hermes-dashboard-pair admin CLI (approve/deny)
+  beacon.py                  secret-less LAN discovery beacon (UDP)
   server.py                  CLI and Uvicorn entry point
 systemd/                     hardened user service
 scripts/
@@ -183,15 +214,15 @@ If the host firewall blocks the port, allow TCP 9120 **only from the Kindle/LAN 
 
 The bundle builder has two modes:
 
-### Template mode (default, safe to publish)
+### Template mode (default, safe to publish) — used by CI releases
 
 ```sh
 python3 scripts/build_kual_bundle.py --output dist/hermes-dashboard-kual.zip
 ```
 
 Produces a ZIP with placeholder tokens (`HOST_IP=PLACEHOLDER.lan`,
-`DASHBOARD_TOKEN=PLACEHOLDER_TOKEN`). Use this when uploading to GitHub
-releases or sharing with other users.
+`DASHBOARD_TOKEN=PLACEHOLDER_TOKEN`). This is the artifact attached to every
+tagged release; pair it on-device with the **Setup Wizard** (above).
 
 ### Personal mode (embeds real tokens; do NOT publish)
 
@@ -216,13 +247,16 @@ step.
    - `/mnt/us/extensions/FBInk/bin/fbink`
    - `/mnt/us/extensions/fbink/bin/fbink`
    - `/usr/bin/fbink` and `PATH`
-4. **Template-mode bundles only**: run `bin/post_install.sh` (interactively,
-   or pass `--host`, `--port`, `--read-token`, and optionally `--control-token`).
-5. Disconnect USB and open KUAL.
+4. Disconnect USB and open KUAL.
+5. **Recommended**: choose **Hermes Dashboard → Setup Wizard (pair Kindle)**
+   and approve the shown code on the host with `hermes-dashboard-pair`.
 6. Choose **Hermes Dashboard → Start Dashboard**.
 
-The `post_install.sh` script replaces placeholder values in `config.sh` with
-real ones. It is idempotent and safe to re-run.
+Manual alternative for step 5 (e.g. segmented networks where discovery cannot
+reach the Kindle): run `bin/post_install.sh` on the device — interactively, or
+pass `--host`, `--port`, `--read-token`, and optionally `--control-token`. The
+script replaces placeholder values in `config.sh` with real ones; it is
+idempotent and safe to re-run.
 
 **Stop Dashboard** terminates the fetch loop, restores `preventScreenSaver=0`,
 and restarts the Amazon UI. If the host is unreachable, FBInk shows one clean
@@ -269,6 +303,26 @@ TOKEN=development-only
 | `GET /state.json` | bearer or `?token=` | deprecated pre-v1 Hermes state |
 | `POST /control` | bearer (control token) | dispatch a tile action (replay-protected) |
 | `GET /control/events` | bearer (control token) | long-poll for action results |
+| `GET /pair/devices` | bearer (control token) | list pending/paired devices (no secrets) |
+| `POST /pair/approve` | bearer (control token) | approve a device by display code |
+| `POST /pair/deny` | bearer (control token) | revoke/remove a device |
+| `POST /pair/poll` | device credentials | OAuth-device-flow poll; returns tokens once approved |
+
+### Pairing and discovery
+
+- The service broadcasts a **secret-less** UDP discovery beacon
+  (`{"service": "hermes-eink-dashboard", ...}`, default port 9121, disable
+  with `--discovery-port 0`) so the Kindle wizard can locate the host without
+  an IP address. Broadcasts do not cross routers; on segmented networks set
+  the host manually via `bin/post_install.sh`.
+- Pairing follows the OAuth device-flow pattern: the Kindle generates its own
+  `device_id`/`device_secret`, displays a short code, and polls
+  `/pair/poll`. Approval happens only from the host CLI using the control
+  token that already lives there. Per-device tokens are minted into
+  `devices.json` (mode 0600), so devices can be revoked individually.
+- Poll hardening: sha256 secret comparison, per-device lockout after five bad
+  secrets, 30-minute pending expiry, pending-request cap, and a global rate
+  limit. All rejections return stable generic error codes.
 
 `/dashboard-data` is the permanent renderer interface. Each panel carries `_meta.status`, `updated_at`, `last_attempt_at`, and a sanitized `error_code`. A failed refresh retains the last successful data with status `stale`; a panel with no successful data is `unavailable`. Clients must ignore unknown fields and reject unsupported `schema_version` values.
 
