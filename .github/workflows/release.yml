@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-kual-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - name: Test
+        run: pytest
+      - name: Build template KUAL bundle
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          python3 scripts/build_kual_bundle.py \
+            --output "dist/hermes-dashboard-kual-v${VERSION}.zip"
+          sha256sum dist/*.zip > dist/SHA256SUMS
+      - name: Attach bundle to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ "$TAG" = "${TAG#v}" ]; then
+            # Manual dispatch without a tag: publish into a rolling "latest" pre-release.
+            TAG="latest"
+            if ! gh release view "$TAG" >/dev/null 2>&1; then
+              gh release create "$TAG" --title "Latest KUAL bundle" --prerelease \
+                --notes "Rolling template bundle built from main. Configure on-device via the Setup Wizard or bin/post_install.sh."
+            fi
+          elif ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
+          gh release upload "$TAG" dist/hermes-dashboard-kual-*.zip dist/SHA256SUMS --clobber
