@@ -22,6 +22,7 @@ def test_kual_extension_contains_required_actions_and_scripts() -> None:
         "bin/start_interactive.sh",
         "bin/stop_interactive.sh",
         "bin/post_install.sh",
+        "bin/start_wizard.sh",
     }
     present = {str(path.relative_to(EXTENSION)) for path in EXTENSION.rglob("*") if path.is_file()}
     assert required_source <= present
@@ -31,6 +32,7 @@ def test_kual_extension_contains_required_actions_and_scripts() -> None:
     assert root["name"] == "Hermes Dashboard"
     actions = {item["name"]: item["params"] for item in root["items"]}
     # Required menu entries.
+    assert actions["Setup Wizard (pair Kindle)"] == "/mnt/us/extensions/hermes_dashboard/bin/start_wizard.sh"
     assert actions["Start Dashboard (read-only)"] == "/mnt/us/extensions/hermes_dashboard/bin/start.sh"
     assert actions["Start Interactive Dashboard"] == "/mnt/us/extensions/hermes_dashboard/bin/start_interactive.sh"
     assert actions["Manual Refresh"] == "/mnt/us/extensions/hermes_dashboard/bin/refresh.sh"

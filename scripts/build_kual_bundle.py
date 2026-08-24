@@ -148,6 +148,12 @@ def build(
             (extension / "bin" / "interactive_client.py").write_bytes(
                 interactive_client.read_bytes()
             )
+        # Bundle the first-run pairing wizard as well.
+        setup_wizard = ROOT / "kindle" / "client" / "setup_wizard.py"
+        if setup_wizard.exists():
+            (extension / "bin" / "setup_wizard.py").write_bytes(
+                setup_wizard.read_bytes()
+            )
         example = extension / "config.sh.example"
         config = example.read_text(encoding="utf-8")
         config = config.replace('HOST_IP="HOST_IP"', f'HOST_IP="{host}"')

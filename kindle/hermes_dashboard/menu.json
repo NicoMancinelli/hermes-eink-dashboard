@@ -5,6 +5,14 @@
       "priority": 10,
       "items": [
         {
+          "name": "Setup Wizard (pair Kindle)",
+          "priority": 0,
+          "action": "/bin/sh",
+          "params": "/mnt/us/extensions/hermes_dashboard/bin/start_wizard.sh",
+          "exitmenu": true,
+          "comment": "Discovers the host and pairs automatically; requires Python 3"
+        },
+        {
           "name": "Start Dashboard (read-only)",
           "priority": 1,
           "action": "/bin/sh",
