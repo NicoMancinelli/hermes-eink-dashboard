@@ -97,3 +97,11 @@ def test_python_launchers_auto_bootstrap_mrpackage() -> None:
         text = (EXTENSION / name).read_text()
         assert "mrpackage install kindle-python3" in text
         assert 'AUTO_INSTALL_PYTHON:-1' in text
+
+
+def test_setup_wizard_auto_starts_dashboard_after_pairing() -> None:
+    text = (EXTENSION / "bin/start_wizard.sh").read_text()
+    assert "AUTO_START_AFTER_PAIR" in text
+    assert "start_interactive.sh" in text
+    # A failed wizard run must still report its exit code (set -e guard).
+    assert "|| status=$?" in text

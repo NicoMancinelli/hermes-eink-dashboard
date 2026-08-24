@@ -37,7 +37,7 @@ def _read_json(path: Path) -> dict:
 
 
 def _load_user_state(config_dir: Path) -> dict:
-    """Load user-controlled state (dismissed alerts, active context).
+    """Load user-controlled state (dismissed alerts, context, controls).
 
     The /control endpoint writes to these JSON files. Surface them in the
     panel so the dashboard reflects what the user actually dismissed or set,
@@ -46,10 +46,15 @@ def _load_user_state(config_dir: Path) -> dict:
     """
     dismissed = _read_json(config_dir / "dismissed_alerts.json")
     context = _read_json(config_dir / "context.json")
+    controls = _read_json(config_dir / "hermes_controls_state.json")
     return {
         "dismissed_alerts": dismissed,
         "active_context": context.get("context", ""),
         "context_updated_at": context.get("updated_at", ""),
+        # Hermes-native controls: which configured model quick prompts are
+        # sent with (empty until a hermes.model.* tile is pressed).
+        "quick_prompt_model": controls.get("quick_prompt_model", ""),
+        "controls_updated_at": controls.get("updated_at", ""),
     }
 
 

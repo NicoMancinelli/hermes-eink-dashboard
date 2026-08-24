@@ -69,7 +69,17 @@ if [ ! -f "$CONFIG" ] && [ -f "$ROOT/config.sh.example" ]; then
 fi
 
 log "starting setup wizard with $PYTHON_BIN"
-"$PYTHON_BIN" "$WIZARD" >> "$LOG" 2>&1
-status=$?
+status=0
+# `|| status=$?` guards against set -e so a failed wizard still logs its code.
+"$PYTHON_BIN" "$WIZARD" >> "$LOG" 2>&1 || status=$?
 log "setup wizard exited status=$status"
+
+# Successful first-run pairing flows straight into the interactive dashboard
+# so the user does not have to reopen KUAL. Disable in config.sh with
+# AUTO_START_AFTER_PAIR=0.
+if [ "$status" -eq 0 ] && [ "${AUTO_START_AFTER_PAIR:-1}" = "1" ] && [ -x "$ROOT/bin/start_interactive.sh" ]; then
+    log "pairing succeeded; starting interactive dashboard"
+    exec /bin/sh "$ROOT/bin/start_interactive.sh"
+fi
+
 exit "$status"

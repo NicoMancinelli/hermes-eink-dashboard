@@ -88,6 +88,8 @@ def test_aggregator_surfaces_user_state(tmp_path: Path) -> None:
     }
     assert panel["user_state"]["active_context"] == "ops-room"
     assert panel["user_state"]["context_updated_at"] == "2026-07-25T07:10:00Z"
+    # No hermes.model tile pressed yet -> empty preference.
+    assert panel["user_state"]["quick_prompt_model"] == ""
 
 
 def test_aggregator_handles_missing_user_state(tmp_path: Path) -> None:
@@ -98,6 +100,8 @@ def test_aggregator_handles_missing_user_state(tmp_path: Path) -> None:
         "dismissed_alerts": {},
         "active_context": "",
         "context_updated_at": "",
+        "quick_prompt_model": "",
+        "controls_updated_at": "",
     }
 
 
@@ -109,3 +113,22 @@ def test_aggregator_swallows_invalid_json(tmp_path: Path) -> None:
     panel = asyncio.run(aggregator.collect())
     assert panel["user_state"]["dismissed_alerts"] == {}
     assert panel["user_state"]["active_context"] == ""
+
+
+def test_aggregator_surfaces_quick_prompt_model(tmp_path: Path) -> None:
+    (tmp_path / "hermes_controls_state.json").write_text(
+        json.dumps({"quick_prompt_model": "sonnet", "updated_at": "2026-07-25T08:00:00Z"})
+    )
+    collector = FakeCollector(sample_snapshot())
+    aggregator = HermesAggregator(collector=collector, interval_seconds=10.0, config_dir=tmp_path)
+    panel = asyncio.run(aggregator.collect())
+    assert panel["user_state"]["quick_prompt_model"] == "sonnet"
+    assert panel["user_state"]["controls_updated_at"] == "2026-07-25T08:00:00Z"
+
+
+def test_aggregator_survives_corrupt_controls_state(tmp_path: Path) -> None:
+    (tmp_path / "hermes_controls_state.json").write_text("{broken")
+    collector = FakeCollector(sample_snapshot())
+    aggregator = HermesAggregator(collector=collector, interval_seconds=10.0, config_dir=tmp_path)
+    panel = asyncio.run(aggregator.collect())
+    assert panel["user_state"]["quick_prompt_model"] == ""

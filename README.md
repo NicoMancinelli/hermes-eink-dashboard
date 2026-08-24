@@ -46,7 +46,9 @@ curl -fsSL http://127.0.0.1:9120/healthz
 The device receives its own read/control tokens over the local network,
 writes them into `config.sh` itself, and is ready to start. Nothing is ever
 typed on the Kindle, and no secret is copied by hand. `hermes-dashboard-pair
-list` shows pending/paired devices; `deny` revokes one.
+list` shows pending/paired devices; `deny` revokes one. After a successful
+pairing the wizard chains straight into **Start Interactive Dashboard**
+(disable with `AUTO_START_AFTER_PAIR=0` in `config.sh`).
 
 Requirements for step 1: jailbreak + KUAL + FBInk. The wizard and interactive
 client need Python 3; if it is missing, the launcher offers to install it via
@@ -417,6 +419,9 @@ the service:
   tile that selects which model subsequent quick prompts run with
   (`chat -m <alias>`). This is a dashboard-side preference: upstream's own
   default model picker requires a TTY and is deliberately left untouched.
+  The active preference is surfaced in the dashboard panel
+  (`user_state.quick_prompt_model`), so the Kindle screen always shows which
+  model quick prompts will use.
 
 Not supported (by design): approving Hermes tool-permission requests from
 the dashboard. Approval decisions are in-process transports inside the agent
