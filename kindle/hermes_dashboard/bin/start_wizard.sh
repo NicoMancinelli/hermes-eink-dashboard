@@ -39,6 +39,22 @@ done
 if [ -z "$PYTHON_BIN" ] && command -v python3 >/dev/null 2>&1; then
     PYTHON_BIN="$(command -v python3)"
 fi
+# Auto-bootstrap Python 3 via mrpackage when missing and allowed.
+if [ -z "$PYTHON_BIN" ] && [ "${AUTO_INSTALL_PYTHON:-1}" = "1" ] && command -v mrpackage >/dev/null 2>&1; then
+    log "python3 not found; attempting: mrpackage install kindle-python3"
+    eips 2 4 "Installing Python 3 (mrpackage)..." >/dev/null 2>&1 || true
+    if mrpackage install kindle-python3 >> "$LOG" 2>&1; then
+        if [ -x "/mnt/us/python3/bin/python3" ]; then
+            PYTHON_BIN="/mnt/us/python3/bin/python3"
+        elif command -v python3 >/dev/null 2>&1; then
+            PYTHON_BIN="$(command -v python3)"
+        fi
+        log "mrpackage install finished; python=$PYTHON_BIN"
+    else
+        log "mrpackage install failed"
+    fi
+fi
+
 if [ -z "$PYTHON_BIN" ]; then
     log "python3 not found; install via mrpackage (kindle-python3)"
     eips 2 4 "Python 3 not found." >/dev/null 2>&1 || true

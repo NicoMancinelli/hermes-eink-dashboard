@@ -88,3 +88,12 @@ def test_built_bundle_includes_interactive_client() -> None:
             assert "hermes_dashboard/bin/start_interactive.sh" in names
             assert "hermes_dashboard/bin/stop_interactive.sh" in names
             assert "hermes_dashboard/bin/post_install.sh" in names
+
+
+def test_python_launchers_auto_bootstrap_mrpackage() -> None:
+    # Interactive + wizard launchers must attempt to install Python 3 via
+    # mrpackage before giving up, so interactive mode needs no manual setup.
+    for name in ("bin/start_interactive.sh", "bin/start_wizard.sh"):
+        text = (EXTENSION / name).read_text()
+        assert "mrpackage install kindle-python3" in text
+        assert 'AUTO_INSTALL_PYTHON:-1' in text
