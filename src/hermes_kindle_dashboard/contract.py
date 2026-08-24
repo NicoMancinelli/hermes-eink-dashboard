@@ -206,6 +206,7 @@ def build_default_layout(
     width: int = 1072,
     height: int = 1448,
     panels: tuple[str, ...] = ("hermes",),
+    control_tiles: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     cols = 4
     rows = 6
@@ -215,23 +216,45 @@ def build_default_layout(
         ("context:set", "Set Context", "context.set"),
     )
     tiles: list[Tile] = []
-    for r in range(4):
-        for c in range(cols):
-            idx = r * cols + c
-            base_id, label, action = placeholders[idx % len(placeholders)]
-            tile_id = base_id if idx < len(placeholders) else f"{base_id}_{idx}"
-            tiles.append(
-                Tile(
-                    id=tile_id,
-                    label=label,
-                    col=c,
-                    row=r,
-                    w=1,
-                    h=1,
-                    kind="action",
-                    action=action,
-                )
+    slot = 0
+    # Real, host-configured control tiles (Hermes prompts/models) come first
+    # so they occupy the top-left of the grid; the remaining slots fall back
+    # to the generic placeholder actions.
+    for descriptor in control_tiles or []:
+        if slot >= 16:
+            break
+        r, c = divmod(slot, cols)
+        tiles.append(
+            Tile(
+                id=str(descriptor["id"]),
+                label=str(descriptor["label"]),
+                col=c,
+                row=r,
+                w=1,
+                h=1,
+                kind="action",
+                action=str(descriptor["action"]),
             )
+        )
+        slot += 1
+    while slot < 16:
+        r, c = divmod(slot, cols)
+        idx = slot
+        base_id, label, action = placeholders[idx % len(placeholders)]
+        tile_id = base_id if idx < len(placeholders) else f"{base_id}_{idx}"
+        tiles.append(
+            Tile(
+                id=tile_id,
+                label=label,
+                col=c,
+                row=r,
+                w=1,
+                h=1,
+                kind="action",
+                action=action,
+            )
+        )
+        slot += 1
 
     if "hermes" in panels:
         tiles.append(

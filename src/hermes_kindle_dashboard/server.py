@@ -16,6 +16,12 @@ from .aggregators.hermes import HermesAggregator
 from .api import ApiSettings, create_app
 from .beacon import BeaconConfig
 from .contract import build_default_layout
+from .hermes_controls import (
+    CliTransport,
+    control_tiles,
+    load_controls_config,
+    register_hermes_controls,
+)
 from .pairing import DeviceStore, PairingService
 from .render import RenderOptions, render_dashboard, render_layout_dashboard
 from .scheduler import ControlBus, collect_once
@@ -177,6 +183,15 @@ def main(argv: list[str] | None = None) -> int:
     actions_dir = Path(actions_dir_str).expanduser()
     if actions_dir.exists():
         register_all_actions(registry, actions_dir, logger=LOGGER)
+
+    # Hermes-native controls (quick prompts / model switching), configured on
+    # the trusted host via hermes_controls.yaml. Without that file they stay
+    # disabled and the layout keeps its generic placeholder tiles.
+    controls_config = load_controls_config(actions_dir / "hermes_controls.yaml", logger=LOGGER)
+    register_hermes_controls(registry, actions_dir, controls_config, CliTransport(controls_config), logger=LOGGER)
+    effective_layout = layout_override
+    if effective_layout is None:
+        effective_layout = build_default_layout(args.width, args.height, control_tiles=control_tiles(controls_config))
     app = create_app(
         ApiSettings(
             token=token,
@@ -189,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
         [HermesAggregator(collector=collector, interval_seconds=args.refresh_seconds)],
         bus=bus,
         registry=registry,
-        layout=layout_override,
+        layout=effective_layout,
         beacon_config=(
             BeaconConfig(port=args.discovery_port, service_port=args.port)
             if args.discovery_port > 0

@@ -1,0 +1,36 @@
+# Hermes-native controls for the E-Ink dashboard.
+#
+# Copy to ~/.config/hermes-kindle-dashboard/hermes_controls.yaml and restart
+# the service. Each entry below becomes an actionable tile on the Kindle:
+#
+#   quick_prompts -> tiles labelled "Ask: <Name>" firing action
+#                    hermes.prompt.<name>, which runs:
+#                      hermes [cli_extra_args] chat --query-file -
+#                    with the prompt piped over stdin (and `-m <model>` when
+#                    a model tile has been pressed beforehand).
+#   models        -> tiles labelled "Model: <alias>" setting the model used
+#                    by subsequent quick prompts (dashboard-side preference
+#                    in hermes_controls_state.json; it does NOT change
+#                    Hermes' own global default, which requires its TTY
+#                    picker).
+#
+# Names/aliases must match ^[A-Za-z0-9._-]{1,32}$. Everything lives on the
+# trusted host; the Kindle only sees tile labels. Delete this file (or set
+# enabled: false) to remove the tiles again.
+
+enabled: true
+
+cli_path: hermes            # absolute path recommended if not on PATH
+cli_extra_args: []          # e.g. ["--profile", "work"]
+
+quick_prompts:
+  briefing: |
+    Summarize everything you worked on since this morning and what is left.
+  standup: |
+    Draft a short standup update from my current session state.
+  triage: |
+    Triage my kanban board and tell me which task I should do next.
+
+models:
+  - sonnet
+  - opus

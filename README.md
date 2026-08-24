@@ -402,6 +402,31 @@ loop in the KUAL bundle does NOT require Python.
 8. The host's renderer regenerates `/dashboard.png` so the next refresh
    reflects any state change from the action.
 
+## Hermes-native controls (ask the agent from the Kindle)
+
+Beyond generic shell workflows, tiles can drive Hermes itself. Create
+`~/.config/hermes-kindle-dashboard/hermes_controls.yaml` (see
+[examples/hermes_controls.yaml](examples/hermes_controls.yaml)) and restart
+the service:
+
+- **Quick prompts** — each `quick_prompts:` entry becomes an **Ask: &lt;Name&gt;**
+  tile. Pressing it on the Kindle runs
+  `hermes chat --query-file -` on the host with that named prompt piped over
+  stdin, so arbitrary text never crosses the network or a shell.
+- **Model preference** — each `models:` entry becomes a **Model: &lt;alias&gt;**
+  tile that selects which model subsequent quick prompts run with
+  (`chat -m <alias>`). This is a dashboard-side preference: upstream's own
+  default model picker requires a TTY and is deliberately left untouched.
+
+Not supported (by design): approving Hermes tool-permission requests from
+the dashboard. Approval decisions are in-process transports inside the agent
+with request binding and fail-closed timeouts; there is no external queue to
+safely mirror, so we do not fake one.
+
+The action names are validated against the host-side config before anything
+runs: unknown `hermes.prompt.*` / `hermes.model.*` actions are rejected even
+though the registry's prefix allowlist would nominally admit them.
+
 ## Security and privacy
 
 - Bind to one LAN/Tailscale address, not `0.0.0.0`.
