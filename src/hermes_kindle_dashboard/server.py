@@ -14,6 +14,7 @@ from .actions import ActionRegistry
 from .actions_runtime import register_all_actions
 from .aggregators.hermes import HermesAggregator
 from .api import ApiSettings, create_app
+from .beacon import BeaconConfig
 from .contract import build_default_layout
 from .pairing import DeviceStore, PairingService
 from .render import RenderOptions, render_dashboard, render_layout_dashboard
@@ -21,6 +22,12 @@ from .scheduler import ControlBus, collect_once
 from .state import DashboardConfig, HermesStateCollector
 
 LOGGER = logging.getLogger("hermes-kindle-dashboard")
+
+
+def _discovery_default() -> int:
+    from .beacon import DEFAULT_DISCOVERY_PORT
+
+    return DEFAULT_DISCOVERY_PORT
 
 
 def _load_token(token: str, token_file: Path | None, *, optional: bool = False) -> str:
@@ -104,6 +111,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="disable the device pairing endpoints (/pair/*)",
     )
+    parser.add_argument(
+        "--discovery-port",
+        type=int,
+        default=int(os.getenv("HERMES_DASHBOARD_DISCOVERY_PORT", str(_discovery_default()))),
+        help="UDP port for LAN discovery broadcasts (0 disables discovery)",
+    )
     parser.add_argument("--insecure", action="store_true", help="allow unauthenticated access")
     parser.add_argument("--render-once", type=Path, help="write one PNG and exit")
     parser.add_argument("--verbose", action="store_true")
@@ -177,6 +190,11 @@ def main(argv: list[str] | None = None) -> int:
         bus=bus,
         registry=registry,
         layout=layout_override,
+        beacon_config=(
+            BeaconConfig(port=args.discovery_port, service_port=args.port)
+            if args.discovery_port > 0
+            else None
+        ),
     )
     LOGGER.info("serving on http://%s:%d", args.host, args.port)
     # Access logging is disabled because legacy Kindle requests may contain a query token.

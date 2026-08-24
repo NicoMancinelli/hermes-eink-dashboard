@@ -21,6 +21,7 @@ from .actions import (
 )
 from collections.abc import Callable
 from .aggregators.base import Aggregator
+from .beacon import BeaconConfig, run_beacon
 from .config import ConfigManager, ConfigSchema
 from .contract import PanelCache, build_default_layout, dashboard_json
 from .pairing import PairingService, PairingValidationError
@@ -101,6 +102,7 @@ def create_app(
     registry: ActionRegistry | None = None,
     layout: dict[str, Any] | None = None,
     config_manager_factory: Callable[[], ConfigManager] | None = None,
+    beacon_config: BeaconConfig | None = None,
 ) -> FastAPI:
     panel_cache = cache or PanelCache()
     control_bus = bus or ControlBus()
@@ -122,6 +124,13 @@ def create_app(
             )
             for provider in providers
         ]
+        if beacon_config is not None:
+            tasks.append(
+                asyncio.create_task(
+                    run_beacon(beacon_config, stop_event),
+                    name="dashboard-discovery-beacon",
+                )
+            )
         try:
             yield
         finally:
