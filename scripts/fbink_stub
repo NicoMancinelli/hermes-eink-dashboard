@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""FBInk stub for Kindle simulation on a regular Linux machine.
+
+Impersonates the subset of the FBInk CLI that the Hermes dashboard clients
+emit (see kindle/client/interactive.py FbinkPainter and bin/fetch.sh) so the
+real client code can run — and be tested — on a dev box with no e-ink
+device. There is no maintained full Kindle system emulator; stubbing the
+interfaces is how the community develops against these devices.
+
+Behaviour:
+- Image paints:   fbink -q -c [-f] -g file=PATH,halign=...,valign=...,w=-1,h=-1 -W GC16
+                  -> copies PATH into $FBINK_STUB_DIR/frame_NNN.png
+- Text screens:   fbink -q -c -f -m -M -t font=...  MESSAGE   (fancy tier)
+                  fbink -q -c -f -m -M -S 2         MESSAGE   (fallback tier)
+                  -> writes $FBINK_STUB_DIR/frame_NNN.txt (and, when Pillow is
+                     importable, renders the text to frame_NNN.png too)
+- Every invocation appends one line to $FBINK_STUB_DIR/fbink.log so tests and
+  humans can assert exactly what the client asked the device to draw.
+
+Configuration via environment:
+    FBINK_STUB_DIR   output directory (default /tmp/fbink-stub)
+
+Exit codes mirror success; unknown flags are accepted silently, matching how
+the real client tolerates device variance.
+"""
+from __future__ import annotations
+
+import os
+import shutil
+import sys
+import time
+from pathlib import Path
+
+
+def parse_args(argv: list[str]) -> dict:
+    options = {
+        "quiet": False,
+        "clear": False,
+        "flash": False,
+        "image_file": None,
+        "text": None,
+        "is_fancy_text": False,
+        "waveform": None,
+        "raw_flags": [],
+    }
+    index = 0
+    while index < len(argv):
+        arg = argv[index]
+        if arg == "-g":
+            # -g file=PATH,halign=CENTER,... (single comma-separated token)
+            index += 1
+            spec = argv[index] if index < len(argv) else ""
+            for part in spec.split(","):
+                key, _, value = part.partition("=")
+                if key == "file":
+                    options["image_file"] = value
+        elif arg == "-W":
+            index += 1
+            options["waveform"] = argv[index] if index < len(argv) else None
+        elif arg in ("-t", "--text"):
+            options["is_fancy_text"] = True
+            # Remaining args form the message; font spec token contains '='.
+            rest = argv[index + 1:]
+            message_parts = [token for token in rest if not token.startswith("regular=") and not token.startswith("bold=")]
+            options["text"] = "\n".join(message_parts)
+            break
+        elif arg == "-S":
+            # -S <size> MESSAGE...
+            options["text"] = "\n".join(argv[index + 2:])
+            break
+        elif arg.startswith("-") and arg != "-" and len(arg) > 1:
+            for flag in arg[1:]:
+                if flag == "q":
+                    options["quiet"] = True
+                elif flag == "c":
+                    options["clear"] = True
+                elif flag == "f":
+                    options["flash"] = True
+                elif flag == "m":
+                    pass  # padded/centered markers — accepted
+            options["raw_flags"].append(arg)
+        else:
+            # Bare positional message (e.g. after -t handling already consumed).
+            options["raw_flags"].append(arg)
+        index += 1
+    return options
+
+
+def render_text_png(path: Path, text: str) -> bool:
+    """Best-effort text rendering when Pillow happens to be installed."""
+    try:
+        from PIL import Image, ImageDraw
+
+        image = Image.new(mode="1", size=(600, 200), color=1)
+        draw = ImageDraw.Draw(image)
+        draw.multiline_text((20, 40), text, fill=0)
+        image.save(path, format="PNG")
+        return True
+    except Exception:
+        return False
+
+
+def main(argv: list[str]) -> int:
+    stub_dir = Path(os.environ.get("FBINK_STUB_DIR", "/tmp/fbink-stub"))
+    stub_dir.mkdir(parents=True, exist_ok=True)
+
+    options = parse_args(argv)
+    sequence = len(list(stub_dir.glob("frame_*"))) + 1
+    stamp = time.strftime("%H:%M:%S")
+
+    if options["image_file"]:
+        target = stub_dir / f"frame_{sequence:03d}.png"
+        source = Path(options["image_file"])
+        try:
+            shutil.copyfile(source, target)
+        except OSError as error:
+            print(f"fbink-stub: cannot copy {source}: {error}", file=sys.stderr)
+            return 1
+        line = f"{stamp} paint flash={options['flash']} wave={options['waveform']} src={source} -> {target.name}"
+    elif options["text"] is not None:
+        kind = "text-fancy" if options["is_fancy_text"] else "text"
+        target = stub_dir / f"frame_{sequence:03d}.txt"
+        target.write_text(options["text"], encoding="utf-8")
+        png_target = stub_dir / f"frame_{sequence:03d}.png"
+        rendered = render_text_png(png_target, options["text"])
+        line = f"{stamp} {kind} flash={options['flash']} -> {target.name}" + (" (+png)" if rendered else "")
+    else:
+        line = f"{stamp} clear-only flash={options['flash']}"
+
+    with open(stub_dir / "fbink.log", "a", encoding="utf-8") as handle:
+        handle.write(line + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

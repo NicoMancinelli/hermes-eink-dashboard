@@ -290,6 +290,34 @@ If orientation or visible dimensions differ, use `fbink -e` on the Kindle to ins
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 .venv/bin/pytest
+```
+
+### Simulating the Kindle on your dev box
+
+There is no maintained full Kindle system emulator, so development and CI use
+interface-level simulation instead:
+
+- **`scripts/fbink_stub`** impersonates the FBInk CLI subset the clients emit.
+  Image paints become `frame_NNN.png` files you can open; text screens become
+  `.txt` (+ rendered `.png` when Pillow is available); every call is logged to
+  `$FBINK_STUB_DIR/fbink.log`.
+- **`scripts/simulate_kindle.sh`** starts the real API host (with synthetic
+  Hermes data) plus the real interactive client wired through the stub:
+
+  ```sh
+  scripts/simulate_kindle.sh          # Ctrl+C stops both
+  ls -t /tmp/fbink-stub/frame_*.png   # watch the dashboard evolve
+  ```
+
+- **`tests/test_device_simulation.py`** runs the actual client *binary* as a
+  subprocess against a live uvicorn host over real sockets and asserts:
+  frames are painted through the FBInk contract, host loss draws exactly one
+  offline screen while the client stays alive, SIGTERM exits cleanly, and a
+  wrong token fails fast.
+
+Input handling (`/dev/input/event*` evdev parsing for 5-way and touch) is
+covered by unit tests with synthetic event streams; exercising it needs real
+hardware or root-owned `uinput`, which CI does not have.
 
 # Render from live Hermes state without starting HTTP.
 .venv/bin/hermes-kindle-dashboard \
