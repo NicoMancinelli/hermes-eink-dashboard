@@ -181,7 +181,8 @@ def create_app(
         focus_tile_id: str | None = None,
     ) -> Response:
         _require_auth(request, settings, allow_query=True)
-        snapshot = _legacy_snapshot(panel_cache.snapshot())
+        full_snapshot = panel_cache.snapshot()
+        snapshot = _legacy_snapshot(full_snapshot)
         target_focus = (
             focus_tile
             or focus_tile_id
@@ -197,10 +198,15 @@ def create_app(
                 bit_depth=settings.bit_depth,
             )
             if app.state.layout is not None or target_focus is not None:
-                eff_layout = dict(app.state.layout or build_default_layout(settings.width, settings.height))
+                eff_layout = dict(
+                    app.state.layout
+                    or build_default_layout(settings.width, settings.height, panels=("hermes", "prompt_response"))
+                )
                 if target_focus:
                     eff_layout["focus"] = {"tile_id": target_focus}
-                image = render_layout_dashboard(eff_layout, snapshot, opts)
+                # Full panel snapshot so non-hermes panels (e.g. prompt_response)
+                # render alongside the hermes summary.
+                image = render_layout_dashboard(eff_layout, full_snapshot, opts)
             else:
                 image = render_dashboard(snapshot, opts)
 

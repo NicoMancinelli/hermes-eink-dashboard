@@ -335,6 +335,7 @@ def render_layout_dashboard(
 
             status_text = "STATUS: UNAVAILABLE"
             hermes_snap: DashboardSnapshot | None = None
+            prompt_data: dict[str, Any] | None = None
 
             if isinstance(snapshot, DashboardSnapshot) and panel_name == "hermes":
                 hermes_snap = snapshot
@@ -352,6 +353,12 @@ def render_layout_dashboard(
                         hermes_snap = DashboardSnapshot.from_panel(clean_data, str(gen_at))
                     except Exception:
                         pass
+                elif panel_name == "prompt_response":
+                    if pstatus in {"ok", "stale"}:
+                        if isinstance(pdata, dict) and pdata.get("available"):
+                            prompt_data = pdata
+                        else:
+                            status_text = "STATUS: NO PROMPTS YET"
 
             draw.text(
                 (inner_x0, inner_y0 + px(22)),
@@ -372,6 +379,38 @@ def render_layout_dashboard(
                 if py + px(16) <= inner_y1:
                     ctx_str = f"CONTEXT: {hermes_snap.session.context_percent}%  ·  TASKS: {len(hermes_snap.tasks)}"
                     draw.text((inner_x0, py), _fit_text(draw, ctx_str, tiny_font, inner_w), fill=0, font=tiny_font)
+
+            elif prompt_data is not None and inner_h > px(40):
+                # Last Hermes quick-prompt answer (sanitized host-side).
+                name = str(prompt_data.get("prompt", ""))
+                when = ""
+                try:
+                    when = datetime.fromisoformat(
+                        str(prompt_data.get("updated_at", "") or "").replace("Z", "+00:00")
+                    ).strftime("%H:%M")
+                except ValueError:
+                    pass
+                failed = str(prompt_data.get("status")) == "error"
+                headline = f"{name} · {when}" if when else name
+                if failed:
+                    headline = f"FAILED · {headline}"
+                draw.text(
+                    (inner_x0, inner_y0 + px(42)),
+                    _fit_text(draw, headline.upper(), small_font, inner_w),
+                    fill=0,
+                    font=small_font,
+                )
+                body_text = str(
+                    prompt_data.get("error_excerpt", "") if failed else prompt_data.get("response_excerpt", "")
+                ).strip()
+                if body_text:
+                    py = inner_y0 + px(60)
+                    line_h = px(16)
+                    max_lines = max(0, int((inner_y1 - py) // line_h))
+                    if max_lines > 0:
+                        for text_line in _wrap_text(draw, body_text, body_font, inner_w, max_lines):
+                            draw.text((inner_x0, py), text_line, fill=0, font=body_font)
+                            py += line_h
 
         else:
             text_w = draw.textlength(tile.label, font=tile_action_font)
