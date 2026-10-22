@@ -14,7 +14,6 @@ against a live uvicorn host over real sockets.
 """
 from __future__ import annotations
 
-import json
 import os
 import signal
 import socket
@@ -152,11 +151,11 @@ def test_real_client_paints_survives_outage_and_exits_cleanly(tmp_path: Path) ->
         process.send_signal(signal.SIGTERM)
         try:
             code = process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
             process.kill()
             raise AssertionError(
                 f"client did not exit on SIGTERM; stdout={process.stdout.read()!r} stderr={process.stderr.read()!r}"
-            )
+            ) from exc
     assert code == 0
 
 

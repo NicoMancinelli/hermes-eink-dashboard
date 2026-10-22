@@ -4,12 +4,10 @@ from __future__ import annotations
 import io
 import json
 import os
-import socket
 import urllib.error
 from pathlib import Path
 
 import pytest
-
 from kindle.client import setup_wizard
 from kindle.client.setup_wizard import (
     BeaconCollector,
@@ -47,7 +45,7 @@ class _FakeSocket:
 
     def recvfrom(self, size: int):
         if not self._datagrams:
-            raise socket.timeout()
+            raise TimeoutError()
         return self._datagrams.pop(0), ("192.168.1.50", 40000)
 
 

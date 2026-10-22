@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from hermes_eink_dashboard.actions import ActionRegistry
+from hermes_eink_dashboard.actions import ActionRegistry, UnknownActionError
 from hermes_eink_dashboard.contract import build_default_layout
 from hermes_eink_dashboard.hermes_controls import (
     CliTransport,
@@ -192,7 +192,7 @@ class TestRegistryIntegration:
         registry = ActionRegistry()
         empty = HermesControlsConfig(enabled=False)
         register_hermes_controls(registry, tmp_path, empty, FakeTransport())
-        with pytest.raises(Exception):
+        with pytest.raises(UnknownActionError, match="not in the allowlist"):
             registry.dispatch(action="hermes.prompt.x", ts=time.time())
 
 

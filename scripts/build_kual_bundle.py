@@ -35,12 +35,12 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "kindle" / "hermes_dashboard"
 sys.path.insert(0, str(ROOT / "src"))
 
 from hermes_eink_dashboard.paths import resolve_config_dir  # noqa: E402
+
 SAFE_HOST = re.compile(r"^[A-Za-z0-9._:-]+$")
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9._~-]+$")
 PLACEHOLDER_HOST = "PLACEHOLDER.lan"
@@ -90,9 +90,10 @@ def _read_token(path: Path, label: str) -> str:
 
 
 def _validate_host(host: str) -> str:
-    if host == PLACEHOLDER_HOST or not SAFE_HOST.fullmatch(host):
-        if host != PLACEHOLDER_HOST:
-            raise SystemExit("host may contain only letters, numbers, dots, colons, underscores, and hyphens")
+    # The bundled placeholder host is allowed through untouched; anything else
+    # must match the safe-character pattern.
+    if host != PLACEHOLDER_HOST and not SAFE_HOST.fullmatch(host):
+        raise SystemExit("host may contain only letters, numbers, dots, colons, underscores, and hyphens")
     return host
 
 

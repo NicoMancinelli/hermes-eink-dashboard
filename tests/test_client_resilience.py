@@ -7,11 +7,9 @@ import urllib.error
 from types import SimpleNamespace
 
 import pytest
-
 from kindle.client.interactive import (
     DashboardClient,
     FbinkPainter,
-    InputEvent,
     MockSource,
     TransientNetworkError,
     _is_transient,
@@ -65,14 +63,14 @@ class RecordingPainter:
 
 
 def _client(bus, painter=None, **kwargs) -> DashboardClient:
-    defaults = dict(
-        source=MockSource([]),
-        image_path="/tmp/test-dash.png",
-        refresh_seconds=0.05,
-        event_poll_seconds=0.01,
-        retry_attempts=2,
-        retry_backoff=0.0,
-    )
+    defaults = {
+        "source": MockSource([]),
+        "image_path": "/tmp/test-dash.png",
+        "refresh_seconds": 0.05,
+        "event_poll_seconds": 0.01,
+        "retry_attempts": 2,
+        "retry_backoff": 0.0,
+    }
     defaults.update(kwargs)
     return DashboardClient(bus=bus, painter=painter, **defaults)
 

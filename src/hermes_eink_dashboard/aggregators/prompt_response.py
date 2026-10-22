@@ -103,7 +103,7 @@ def build_prompt_response_panel(config_dir: Path) -> PanelData:
     error_text = latest.get("stderr") if status == "error" else ""
 
     history = []
-    for when, _, payload in results[:MAX_HISTORY]:
+    for _, _, payload in results[:MAX_HISTORY]:
         history.append(
             {
                 "prompt": str(payload.get("prompt", "")),
@@ -117,8 +117,8 @@ def build_prompt_response_panel(config_dir: Path) -> PanelData:
         "prompt": str(latest.get("prompt", "")),
         "status": status,
         "returncode": latest.get("returncode"),
-        "response_excerpt": sanitize_excerpt(response_text),
-        "error_excerpt": sanitize_excerpt(error_text, limit=MAX_ERROR_CHARS),
+        "response_excerpt": sanitize_excerpt(str(response_text or "")),
+        "error_excerpt": sanitize_excerpt(str(error_text or ""), limit=MAX_ERROR_CHARS),
         "updated_at": str(latest.get("updated_at", "") or ""),
         "recent": history,
     }

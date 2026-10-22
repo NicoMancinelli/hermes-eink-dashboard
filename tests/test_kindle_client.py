@@ -16,7 +16,6 @@ correctness, not for live device behavior.
 """
 from __future__ import annotations
 
-import asyncio
 import socket
 import threading
 import time
@@ -25,12 +24,6 @@ from pathlib import Path
 
 import pytest
 import uvicorn
-
-from hermes_eink_dashboard.actions import ActionRegistry
-from hermes_eink_dashboard.api import ApiSettings, create_app
-from hermes_eink_dashboard.contract import PanelCache, build_default_layout
-from hermes_eink_dashboard.scheduler import ControlBus
-
 from kindle.client.interactive import (
     BusClient,
     CombinedSource,
@@ -43,6 +36,11 @@ from kindle.client.interactive import (
     Tile,
     TouchSource,
 )
+
+from hermes_eink_dashboard.actions import ActionRegistry
+from hermes_eink_dashboard.api import ApiSettings, create_app
+from hermes_eink_dashboard.contract import PanelCache, build_default_layout
+from hermes_eink_dashboard.scheduler import ControlBus
 
 
 class _EmptyAggregator:

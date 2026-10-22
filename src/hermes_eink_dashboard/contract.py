@@ -3,9 +3,10 @@ from __future__ import annotations
 import copy
 import re
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any
 
 PanelData = dict[str, Any]
 _PANEL_NAME = re.compile(r"^[a-z][a-z0-9_]*$")

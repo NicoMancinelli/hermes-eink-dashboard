@@ -1,4 +1,5 @@
 import time
+
 import pytest
 
 from hermes_eink_dashboard.actions import (

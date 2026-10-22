@@ -13,7 +13,6 @@ from hermes_eink_dashboard.actions_runtime import (
     ContextSetAction,
     RefreshAction,
     WorkflowAction,
-    action_config,
     parse_action_config,
     register_all_actions,
 )

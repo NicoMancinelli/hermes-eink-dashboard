@@ -129,7 +129,6 @@ src/hermes_eink_dashboard/
   beacon.py                  secret-less LAN discovery beacon (UDP)
   paths.py                   runtime directory resolution (rename migration)
   server.py                  CLI and Uvicorn entry point
-src/hermes_kindle_dashboard/ deprecated import alias for the package above
 systemd/                     hardened user service
 scripts/
   install_host.sh            host installer
@@ -171,8 +170,11 @@ Inside a single tile, this synthesizes a `focus` event on press and an
 `activate` event on release (tap). A drag (press in tile A, release in tile
 B) emits a focus event for B on release, with no activate.
 
-There is no multi-touch support in v0.4 (the Kindle touchscreen is
-single-touch). Long-press, pinch, and gestures are not recognized.
+The Kindlescreen is single-touch: gestures are decoded one contact at a time,
+and pinch, long-press and multi-finger gestures are not recognized. Single-
+touch protocol A (`ABS_X`/`ABS_Y`) and multi-touch protocol B
+(`ABS_MT_POSITION_X`/`Y`) coordinate layouts are both decoded, so every
+supported device reports usable coordinates.
 
 
 ## Install from source (alternative)
@@ -233,11 +235,13 @@ possible E-Ink devices). Nothing breaks for existing installs:
   old `hermes-kindle-dashboard.service` unit. Until you re-run it, the
   service still finds the legacy directory on its own.
 - **The service unit is now `hermes-eink-dashboard.service`** and the console
-  command is `hermes-eink-dashboard`. The old `hermes-kindle-dashboard`
-  command still exists as an alias.
-- **Python imports keep working**: `import hermes_kindle_dashboard` resolves
-  to the same modules as `hermes_eink_dashboard` and emits a
-  `DeprecationWarning`. New code should use the new name.
+  command is `hermes-eink-dashboard`. The `hermes-kindle-dashboard` command
+  and the `hermes_kindle_dashboard` import package were removed in v1.0.0,
+  after the promised one-release deprecation cycle. Replace
+  `hermes-kindle-dashboard` on `$PATH` with `hermes-eink-dashboard`.
+- **Python imports must be updated**: `import hermes_kindle_dashboard` no
+  longer resolves. This only affects third-party code that imported the old
+  name; the dashboard itself never did.
 
 See [CONSOLIDATION.md](CONSOLIDATION.md) for the full rationale.
 

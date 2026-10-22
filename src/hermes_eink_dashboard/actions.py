@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any, Callable, Iterable
+from contextlib import suppress
+from typing import Any
 
 LOGGER = logging.getLogger("hermes-eink-dashboard.actions")
 
@@ -132,11 +134,10 @@ class ActionRegistry:
                 self._pending.add(future)
             future.add_done_callback(self._drop_pending)
             if on_complete is not None:
-                future.add_done_callback(
-                    lambda fut, _action=action, _tile_id=tile_id, _callback=on_complete: self._notify_complete(
-                        _callback, fut, _action, _tile_id
-                    )
-                )
+                def _notify(fut: Future) -> None:
+                    self._notify_complete(on_complete, fut, action, tile_id)
+
+                future.add_done_callback(_notify)
 
         LOGGER.info("action=%s result=ok tile_id=%s nonce=%s", action, tile_id, nonce)
         return {
@@ -202,7 +203,5 @@ class ActionRegistry:
             if remaining <= 0:
                 return
             # Wait on the first pending future to avoid spinning.
-            try:
+            with suppress(Exception):
                 pending[0].result(timeout=remaining)
-            except Exception:
-                pass

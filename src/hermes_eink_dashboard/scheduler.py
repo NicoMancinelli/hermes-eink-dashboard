@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from contextlib import suppress
 from typing import Any
 
 from .aggregators.base import Aggregator
@@ -55,10 +56,8 @@ async def _wait_or_stop(stop_event: asyncio.Event, delay: float) -> None:
     if delay <= 0:
         await asyncio.sleep(0)
         return
-    try:
+    with suppress(TimeoutError):
         await asyncio.wait_for(stop_event.wait(), timeout=delay)
-    except TimeoutError:
-        pass
 
 
 async def run_aggregator_loop(

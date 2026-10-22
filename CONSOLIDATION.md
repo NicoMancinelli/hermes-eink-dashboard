@@ -28,13 +28,11 @@ Kindle stays a first-class adapter and build target, and the
 
 - The Python package was renamed `hermes_kindle_dashboard` →
   `hermes_eink_dashboard` (`git mv`).
-- `src/hermes_kindle_dashboard/__init__.py` remains as a **deprecated
-  alias**: importing it (or any submodule) yields the *same module objects*
-  as the new package and emits a `DeprecationWarning`. Locked in by
-  `tests/test_compat_alias.py`.
+- The deprecated `src/hermes_kindle_dashboard/` alias package and the
+  `hermes-kindle-dashboard` console alias shipped through the promised
+  one-release deprecation cycle and were **removed in v1.0.0**.
 - `pyproject.toml`: distribution name → `hermes-eink-dashboard`; console
-  command `hermes-eink-dashboard`, with `hermes-kindle-dashboard` kept as a
-  **deprecated alias** to the same entry point.
+  commands `hermes-eink-dashboard` and `hermes-dashboard-pair`.
 
 ### Runtime paths and service
 

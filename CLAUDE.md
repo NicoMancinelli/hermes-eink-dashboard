@@ -2,8 +2,9 @@
 
 Standalone, publishable project. Do not import files, credentials, or state from sibling projects.
 
-The Python package is `hermes_eink_dashboard`; `hermes_kindle_dashboard` is a
-deprecated alias kept for one release cycle (see `CONSOLIDATION.md`).
+The Python package is `hermes_eink_dashboard`. The `hermes_kindle_dashboard`
+import alias and `hermes-kindle-dashboard` console command were removed in
+v1.0.0 after their deprecation cycle (see `CONSOLIDATION.md`).
 
 ## Commands
 

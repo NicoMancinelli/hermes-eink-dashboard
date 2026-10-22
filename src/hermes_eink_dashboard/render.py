@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -90,7 +92,9 @@ def render_dashboard(snapshot: DashboardSnapshot, options: RenderOptions | None 
 
     width, height = opts.width, opts.height
     scale = min(width / 600, height / 800)
-    px = lambda value: max(1, round(value * scale))
+    def px(value: float) -> int:
+        return max(1, round(value * scale))
+
     margin = px(18)
     gap = px(10)
     line = max(2, px(1.5))
@@ -124,7 +128,6 @@ def render_dashboard(snapshot: DashboardSnapshot, options: RenderOptions | None 
     status_h = round(available * 0.25)
     tasks_h = round(available * 0.34)
     memory_h = round(available * 0.16)
-    activity_h = available - status_h - tasks_h - memory_h
 
     status_box = (margin, content_top, width - margin, content_top + status_h)
     tasks_top = status_box[3] + gap
@@ -248,7 +251,9 @@ def render_layout_dashboard(
 
     width, height = opts.width, opts.height
     scale = min(width / 600, height / 800)
-    px = lambda value: max(1, round(value * scale))
+    def px(value: float) -> int:
+        return max(1, round(value * scale))
+
     margin = px(18)
     gap = px(10)
     radius = px(8)
@@ -353,12 +358,11 @@ def render_layout_dashboard(
                         hermes_snap = DashboardSnapshot.from_panel(clean_data, str(gen_at))
                     except Exception:
                         pass
-                elif panel_name == "prompt_response":
-                    if pstatus in {"ok", "stale"}:
-                        if isinstance(pdata, dict) and pdata.get("available"):
-                            prompt_data = pdata
-                        else:
-                            status_text = "STATUS: NO PROMPTS YET"
+                elif panel_name == "prompt_response" and pstatus in {"ok", "stale"}:
+                    if isinstance(pdata, dict) and pdata.get("available"):
+                        prompt_data = pdata
+                    else:
+                        status_text = "STATUS: NO PROMPTS YET"
 
             draw.text(
                 (inner_x0, inner_y0 + px(22)),
@@ -384,12 +388,10 @@ def render_layout_dashboard(
                 # Last Hermes quick-prompt answer (sanitized host-side).
                 name = str(prompt_data.get("prompt", ""))
                 when = ""
-                try:
+                with suppress(ValueError):
                     when = datetime.fromisoformat(
                         str(prompt_data.get("updated_at", "") or "").replace("Z", "+00:00")
                     ).strftime("%H:%M")
-                except ValueError:
-                    pass
                 failed = str(prompt_data.get("status")) == "error"
                 headline = f"{name} · {when}" if when else name
                 if failed:

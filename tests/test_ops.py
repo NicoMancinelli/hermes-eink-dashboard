@@ -4,7 +4,6 @@ import sys
 import zipfile
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[1]
 
 
@@ -240,7 +239,6 @@ def test_post_install_then_start_interactive_e2e(tmp_path: Path) -> None:
     start_script = start_script.replace("/tmp/hermes_dashboard", str(state))
     # Inject a stub python3 by using the venv's python3 (works as a stand-in
     # because we're only validating the launcher logic).
-    stub_python = sys.executable
     # Replace the list of python3 candidates with a guaranteed-miss list
     # followed by the real interpreter, so the launcher picks it up.
     start_script = start_script.replace(

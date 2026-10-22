@@ -36,7 +36,7 @@ def client(pairing: PairingService) -> TestClient:
     return TestClient(create_app(settings=settings, aggregators=[]))
 
 
-def _poll(client: TestClient, device_id=DEVICE_ID, secret=DEVICE_SECRET, name=None) -> "object":
+def _poll(client: TestClient, device_id=DEVICE_ID, secret=DEVICE_SECRET, name=None) -> object:
     payload: dict = {"device_id": device_id, "device_secret": secret}
     if name is not None:
         payload["name"] = name
@@ -119,9 +119,11 @@ class TestDeviceStore:
 
 class TestPairingService:
     def test_poll_validates_credentials(self, pairing: PairingService) -> None:
-        with pytest.raises(Exception):
+        from hermes_eink_dashboard.pairing import PairingValidationError
+
+        with pytest.raises(PairingValidationError):
             pairing.poll("XYZ", DEVICE_SECRET)
-        with pytest.raises(Exception):
+        with pytest.raises(PairingValidationError):
             pairing.poll(DEVICE_ID, "short")
 
     def test_poll_rate_limited(self, pairing: PairingService, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -12,6 +12,7 @@ import uvicorn
 
 from .actions import ActionRegistry
 from .actions_runtime import register_all_actions
+from .aggregators.base import Aggregator
 from .aggregators.hermes import HermesAggregator
 from .aggregators.prompt_response import PromptResponseAggregator
 from .api import ApiSettings, create_app
@@ -25,7 +26,7 @@ from .hermes_controls import (
 )
 from .pairing import DeviceStore, PairingService
 from .paths import resolve_config_dir
-from .render import RenderOptions, render_dashboard, render_layout_dashboard
+from .render import RenderOptions, render_layout_dashboard
 from .scheduler import ControlBus, collect_once
 from .state import DashboardConfig, HermesStateCollector
 
@@ -154,16 +155,12 @@ def main(argv: list[str] | None = None) -> int:
         layout_override = parse_layout_yaml(args.layout_yaml.read_text(encoding="utf-8"))
 
     if args.render_once:
-        # Use the FastAPI app's lifespan to run a single collection cycle, then
-        # render to PNG. This shares the renderer with the live service.
-        fastapi_app = create_app(
-            ApiSettings(token="", width=args.width, height=args.height, bit_depth=args.bit_depth),
-            [HermesAggregator(collector=collector, interval_seconds=args.refresh_seconds)],
-        )
-        # Trigger one aggregator cycle synchronously.
+        # Run a single collection cycle against a fresh cache, then render
+        # to PNG. This shares the aggregator/collector with the live service
+        # but does not start any background tasks.
         from .contract import PanelCache as _PanelCache
         cache = _PanelCache()
-        providers = [
+        providers: list[Aggregator] = [
             HermesAggregator(collector=collector, interval_seconds=args.refresh_seconds),
             PromptResponseAggregator(config_dir=actions_dir),
         ]

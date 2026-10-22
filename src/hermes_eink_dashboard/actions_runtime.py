@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -272,10 +273,8 @@ class RefreshAction:
         **kwargs: Any,
     ) -> dict[str, Any]:
         if self.cache is not None:
-            try:
+            with suppress(ValueError):
                 self.cache.register("refresh")
-            except ValueError:
-                pass
             self.cache.record_success("refresh", {})
         return {"status": "ok", "action": "refresh"}
 

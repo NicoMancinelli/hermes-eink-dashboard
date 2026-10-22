@@ -1,8 +1,6 @@
 import json
-import os
 import subprocess
 from pathlib import Path
-
 
 ROOT = Path(__file__).parents[1]
 EXTENSION = ROOT / "kindle" / "hermes_dashboard"

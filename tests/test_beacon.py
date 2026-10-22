@@ -6,8 +6,8 @@ import json
 import socket
 
 from hermes_eink_dashboard.beacon import (
-    BeaconConfig,
     DEFAULT_DISCOVERY_PORT,
+    BeaconConfig,
     broadcast_once,
     build_beacon_payload,
     instance_id_for,

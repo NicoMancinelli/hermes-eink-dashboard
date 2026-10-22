@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+from collections.abc import Callable, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Iterable
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
@@ -19,7 +20,6 @@ from .actions import (
     RateLimitExceededError,
     UnknownActionError,
 )
-from collections.abc import Callable
 from .aggregators.base import Aggregator
 from .beacon import BeaconConfig, run_beacon
 from .config import ConfigManager, ConfigSchema
@@ -70,7 +70,7 @@ async def _json_body(request: Request) -> dict[str, Any]:
     try:
         body = await request.json()
     except Exception:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
     if not isinstance(body, dict):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
     return body
@@ -238,7 +238,7 @@ def create_app(
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
         if not isinstance(body, dict):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
 
@@ -277,15 +277,15 @@ def create_app(
                 on_complete=_on_complete,
             )
         except UnknownActionError:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from None
         except RateLimitExceededError:
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="rate_limited")
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="rate_limited") from None
         except InvalidTimestampError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_timestamp")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_timestamp") from None
         except InvalidNonceError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_nonce")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_nonce") from None
         except (ActionError, ValueError, TypeError):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
 
         control_bus.publish({"phase": "ack", **res})
         return JSONResponse({"status": "ok", "action": action, "tile_id": tile_id})
@@ -316,7 +316,7 @@ def create_app(
         try:
             record = settings.pairing.approve(str(body.get("device", "")))
         except PairingValidationError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
         if record is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown_device")
         return JSONResponse({"status": "ok", "device": record.public_view()})
@@ -331,7 +331,7 @@ def create_app(
         try:
             removed = settings.pairing.deny(str(body.get("device", "")))
         except PairingValidationError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
         if not removed:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown_device")
         return JSONResponse({"status": "ok"})
@@ -349,7 +349,7 @@ def create_app(
                 body.get("name"),
             )
         except PairingValidationError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
         if result.status == "forbidden":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
         if result.status == "rate_limited":
@@ -380,18 +380,18 @@ def create_app(
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
         if not isinstance(body, dict):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
 
         try:
             config = ConfigSchema(**body)
         except Exception as e:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from None
 
         config_manager = app.state.config_manager
         config_manager.save(config)
-        rendered = config_manager.regenerate_config_sh(config)
+        config_manager.regenerate_config_sh(config)
         config_sh_path = config_manager.safe_output_path
 
         return JSONResponse({
@@ -408,14 +408,14 @@ def create_app(
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
         if not isinstance(body, dict):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
 
         try:
             config = ConfigSchema(**body)
         except Exception as e:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from None
 
         config_manager = app.state.config_manager
         template = config_manager.load_template()

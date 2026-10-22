@@ -15,11 +15,11 @@ import urllib.request
 from pathlib import Path
 
 import uvicorn
+from kindle.client.setup_wizard import run_wizard
 
 from hermes_eink_dashboard.api import ApiSettings, create_app
 from hermes_eink_dashboard.beacon import broadcast_once, build_beacon_payload
 from hermes_eink_dashboard.pairing import DeviceStore, PairingService
-from kindle.client.setup_wizard import run_wizard
 
 CONTROL_TOKEN = "control-token-e2e"
 
@@ -159,7 +159,6 @@ def test_full_pairing_flow_over_real_sockets(tmp_path: Path) -> None:
 def test_wizard_times_out_when_never_approved(tmp_path: Path) -> None:
     tcp_port = _free_port(socket.SOCK_STREAM)
     udp_port = _free_port(socket.SOCK_DGRAM)
-    base_url = f"http://127.0.0.1:{tcp_port}"
 
     settings = ApiSettings(token="r", control_token=CONTROL_TOKEN, pairing=PairingService(DeviceStore(tmp_path / "d.json")))
     app = create_app(settings=settings, aggregators=[])

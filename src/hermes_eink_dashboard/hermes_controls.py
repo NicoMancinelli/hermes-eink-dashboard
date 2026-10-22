@@ -19,8 +19,8 @@ Design constraints inherited from the security model:
 from __future__ import annotations
 
 import json
-import os
 import logging
+import os
 import re
 import subprocess
 from dataclasses import dataclass, field

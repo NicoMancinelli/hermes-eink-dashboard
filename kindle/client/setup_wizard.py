@@ -81,7 +81,7 @@ class BeaconCollector:
         while time.monotonic() < deadline:
             try:
                 data, address = self._sock.recvfrom(2048)
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 break
@@ -175,7 +175,7 @@ def render_config(existing: str, host: str, port: int, read_token: str, control_
     text = replace(r'^DASHBOARD_TOKEN=.*$', f'DASHBOARD_TOKEN="{read_token}"', text)
     text = replace(r'^CONTROL_TOKEN=.*$', f'CONTROL_TOKEN="{control_token}"', text)
     text = replace(r'^DASHBOARD_URL=.*$',
-                   f'DASHBOARD_URL="http://${{HOST_IP}}:${{HOST_PORT}}/dashboard.png?token=${{DASHBOARD_TOKEN}}"',
+                   'DASHBOARD_URL="http://${HOST_IP}:${HOST_PORT}/dashboard.png?token=${DASHBOARD_TOKEN}"',
                    text)
     return text
 
@@ -183,9 +183,11 @@ def render_config(existing: str, host: str, port: int, read_token: str, control_
 def write_config(path: str, example_path: str, host: str, port: int, read_token: str, control_token: str) -> bool:
     try:
         if os.path.exists(path):
-            existing = open(path, encoding="utf-8").read()
+            with open(path, encoding="utf-8") as handle:
+                existing = handle.read()
         elif os.path.exists(example_path):
-            existing = open(example_path, encoding="utf-8").read()
+            with open(example_path, encoding="utf-8") as handle:
+                existing = handle.read()
         else:
             log("no config.sh or config.sh.example found")
             return False

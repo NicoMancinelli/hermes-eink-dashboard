@@ -33,7 +33,7 @@ import re
 import threading
 import time
 from collections import deque
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -176,7 +176,7 @@ class DeviceStore:
         os.chmod(self.path, 0o600)
 
     # ------------------------------------------------------------- queries
-    def list_devices(self) -> list[DeviceRecord]:
+    def list_devices(self) -> list[dict[str, Any]]:
         with self._lock:
             return [record.public_view() for record in self._load().values()]
 

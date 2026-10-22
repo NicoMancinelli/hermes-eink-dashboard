@@ -34,7 +34,7 @@ class BeaconConfig:
 
 
 def instance_id_for(hostname: str, service_port: int) -> str:
-    digest = hashlib.sha256(f"{hostname}:{service_port}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{hostname}:{service_port}".encode()).hexdigest()
     return digest[:8]
 
 

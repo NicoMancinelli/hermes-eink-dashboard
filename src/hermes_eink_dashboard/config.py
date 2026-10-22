@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import re
-import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
+import yaml
 from pydantic import BaseModel, Field, computed_field, field_validator
 
 from .paths import resolve_config_dir
@@ -28,7 +27,7 @@ class ConfigSchema(BaseModel):
         pattern=r"^[A-Za-z0-9._~-]+$",
     )
 
-    # Optional keys (Phase 5+ interactive controls)
+    # Optional key (interactive write controls)
     control_token: str = Field(
         default="",
         description="Write token for /control and /control/events. Leave empty to disable write endpoints.",
@@ -111,7 +110,7 @@ DEFAULT_TEMPLATE = """# Hermes Dashboard Kindle client configuration.
 #   HOST_PORT        - HTTP port on the host (default 9120).
 #   DASHBOARD_TOKEN  - Read token. Used for /dashboard.png and /dashboard.json.
 #
-# Optional keys (Phase 5+):
+# Optional keys:
 #   CONTROL_TOKEN    - Write token. Required for /control and /control/events.
 #                      Generate with:
 #                        python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
@@ -124,13 +123,15 @@ DEFAULT_TEMPLATE = """# Hermes Dashboard Kindle client configuration.
 #   KEEP_AWAKE       - Set to 1 to keep the Kindle awake while the dashboard is running.
 #   STOP_FRAMEWORK   - Set to 1 to stop the Kindle framework while the dashboard runs.
 #   FBINK            - Override path to fbink (auto-detected by default).
+#   AUTO_INSTALL_PYTHON - Set to 0 to never run mrpackage (default 1).
+#   AUTO_START_AFTER_PAIR - Set to 0 to skip the first render after pairing (default 1).
 #
 HOST_IP="HOST_IP"
 HOST_PORT="9120"
 DASHBOARD_TOKEN="CHANGE_ME"
 DASHBOARD_URL="http://${HOST_IP}:${HOST_PORT}/dashboard.png?token=${DASHBOARD_TOKEN}"
 
-# Phase 5+ interactive controls (optional).
+# Interactive controls (optional).
 # Generate a separate token for write access with:
 #   python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
 # Leave empty to disable /control endpoints (they return 503 service unavailable).
@@ -213,22 +214,24 @@ class ConfigManager:
                 return None
             return ConfigSchema(**data)
         except (yaml.YAMLError, OSError) as e:
-            raise RuntimeError(f"Failed to load config from {self.config_path}: {e}")
+            raise RuntimeError(f"Failed to load config from {self.config_path}: {e}") from e
 
     def load_template(self) -> str:
         """Load the config.sh.example template."""
         try:
             return self.template_path.read_text(encoding="utf-8")
         except OSError as e:
-            raise RuntimeError(f"Failed to load template from {self.template_path}: {e}")
+            raise RuntimeError(f"Failed to load template from {self.template_path}: {e}") from e
 
     def save(self, config: ConfigSchema) -> None:
         """Save configuration to YAML file."""
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         # Use model_dump with exclude_none to omit optional empty fields
         data = config.model_dump(exclude_none=True)
-        # Don't save the template field
+        # Don't persist derived or fixed fields: they are recomputed on load and
+        # would otherwise go stale if the hand-edited inputs changed.
         data.pop("dashboard_url_template", None)
+        data.pop("dashboard_url", None)
         content = yaml.dump(data, default_flow_style=False, sort_keys=False)
         self.config_path.write_text(content, encoding="utf-8")
 
@@ -264,4 +267,5 @@ class ConfigManager:
         )
         data = example.model_dump(exclude_none=True)
         data.pop("dashboard_url_template", None)
+        data.pop("dashboard_url", None)
         return yaml.dump(data, default_flow_style=False, sort_keys=False)

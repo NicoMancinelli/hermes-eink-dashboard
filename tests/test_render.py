@@ -90,6 +90,7 @@ def test_build_default_layout() -> None:
 
 def test_render_layout_dashboard_focus_border_presence() -> None:
     import hashlib
+
     from hermes_eink_dashboard.contract import build_default_layout
     from hermes_eink_dashboard.render import render_layout_dashboard
 
@@ -115,6 +116,7 @@ def test_render_layout_dashboard_focus_border_presence() -> None:
 
 def test_render_layout_dashboard_label_and_panel_preview() -> None:
     import hashlib
+
     from hermes_eink_dashboard.contract import build_default_layout
     from hermes_eink_dashboard.render import render_layout_dashboard
 
@@ -167,6 +169,7 @@ tiles:
 
 def test_render_layout_dashboard_label_variations() -> None:
     import hashlib
+
     from hermes_eink_dashboard.contract import Tile, dashboard_json
     from hermes_eink_dashboard.render import render_layout_dashboard
 
@@ -192,6 +195,7 @@ def test_render_layout_dashboard_label_variations() -> None:
 
 def test_render_layout_dashboard_panel_preview_with_and_without_snapshot() -> None:
     import hashlib
+
     from hermes_eink_dashboard.contract import Tile, dashboard_json
     from hermes_eink_dashboard.render import render_layout_dashboard
 

@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -23,7 +25,7 @@ class DashboardConfig:
     max_events: int = 5
 
     @classmethod
-    def from_home(cls, hermes_home: Path, context_limit: int = 262_144) -> "DashboardConfig":
+    def from_home(cls, hermes_home: Path, context_limit: int = 262_144) -> DashboardConfig:
         home = hermes_home.expanduser().resolve()
         return cls(
             hermes_home=home,
@@ -82,7 +84,7 @@ class DashboardSnapshot:
         return asdict(self)
 
     @classmethod
-    def from_panel(cls, panel: Mapping[str, Any], generated_at: str) -> "DashboardSnapshot":
+    def from_panel(cls, panel: Mapping[str, Any], generated_at: str) -> DashboardSnapshot:
         """Reconstruct the legacy snapshot consumed by the PNG renderer."""
 
         session = panel.get("session", {})
@@ -268,10 +270,8 @@ class HermesStateCollector:
                 pass
         profile_chars = 0
         for path in (self.config.memory_file, self.config.user_file):
-            try:
+            with suppress(OSError):
                 profile_chars += len(path.read_text(encoding="utf-8", errors="replace"))
-            except OSError:
-                pass
         return MemoryState(fact_count, average_trust, retrieved, profile_chars)
 
     def _recent_events(self) -> tuple[str, ...]:

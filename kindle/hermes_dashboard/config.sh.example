@@ -6,7 +6,7 @@
 #   HOST_PORT        - HTTP port on the host (default 9120).
 #   DASHBOARD_TOKEN  - Read token. Used for /dashboard.png and /dashboard.json.
 #
-# Optional keys (Phase 5+):
+# Optional keys:
 #   CONTROL_TOKEN    - Write token. Required for /control and /control/events.
 #                      Generate with:
 #                        python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
@@ -19,13 +19,15 @@
 #   KEEP_AWAKE       - Set to 1 to keep the Kindle awake while the dashboard is running.
 #   STOP_FRAMEWORK   - Set to 1 to stop the Kindle framework while the dashboard runs.
 #   FBINK            - Override path to fbink (auto-detected by default).
-
+#   AUTO_INSTALL_PYTHON - Set to 0 to never run mrpackage (default 1).
+#   AUTO_START_AFTER_PAIR - Set to 0 to skip the first render after pairing (default 1).
+#
 HOST_IP="HOST_IP"
 HOST_PORT="9120"
 DASHBOARD_TOKEN="CHANGE_ME"
 DASHBOARD_URL="http://${HOST_IP}:${HOST_PORT}/dashboard.png?token=${DASHBOARD_TOKEN}"
 
-# Phase 5+ interactive controls (optional).
+# Interactive controls (optional).
 # Generate a separate token for write access with:
 #   python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
 # Leave empty to disable /control endpoints (they return 503 service unavailable).

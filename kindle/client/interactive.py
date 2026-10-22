@@ -22,10 +22,10 @@ import argparse
 import json
 import logging
 import os
+import secrets
 import select
 import signal
 import struct
-import secrets
 import sys
 import time
 import urllib.error
@@ -33,7 +33,6 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Protocol
-
 
 LOGGER = logging.getLogger("hermes-eink-dashboard.client")
 
@@ -80,7 +79,7 @@ class Tile:
     action: str | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Tile":
+    def from_dict(cls, data: dict) -> Tile:
         return cls(
             id=str(data["id"]),
             label=str(data.get("label", "")),
@@ -107,7 +106,7 @@ class Layout:
     focus_tile_id: str
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Layout":
+    def from_dict(cls, data: dict) -> Layout:
         layout = data.get("layout", {})
         tiles = tuple(Tile.from_dict(t) for t in data.get("tiles", []))
         focus = data.get("focus", {})
@@ -441,7 +440,6 @@ class FbinkPainter:
         return bool(self.enabled and self._fbink)
 
     def _run_fbink(self, argv: list[str]) -> bool:
-        import subprocess
 
         try:
             result = self._runner([self._fbink, "-q", *argv], capture_output=True, timeout=30)
@@ -525,7 +523,6 @@ class BusClient:
             return response.read()
 
     def post_control(self, tile_id: str, action: str) -> dict:
-        import secrets
         body = json.dumps(
             {
                 "tile_id": tile_id,
@@ -590,7 +587,7 @@ class DashboardClient:
         image_path: str,
         refresh_seconds: float = 15.0,
         event_poll_seconds: float = 0.5,
-        painter: "FbinkPainter | None" = None,
+        painter: FbinkPainter | None = None,
         retry_attempts: int = 3,
         retry_backoff: float = 1.0,
     ) -> None:
