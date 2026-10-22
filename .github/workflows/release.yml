@@ -26,7 +26,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           python3 scripts/build_kual_bundle.py \
             --output "dist/hermes-dashboard-kual-v${VERSION}.zip"
-          sha256sum dist/*.zip > dist/SHA256SUMS
+          sha256sum dist/*.zip | sed 's| dist/| |' > dist/SHA256SUMS
       - name: Attach bundle to release
         env:
           GH_TOKEN: ${{ github.token }}
