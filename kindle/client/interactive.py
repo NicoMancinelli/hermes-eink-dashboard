@@ -500,6 +500,9 @@ class BusClient:
         # silently is worse than failing fast.
         self._control_token = control_token or ""
         self._timeout = timeout
+        # Set to False once the host tells us it has no control-event stream
+        # (older host, missing control token). The client then stops polling.
+        self.events_supported = True
 
     def get_layout(self) -> Layout:
         request = urllib.request.Request(
@@ -548,6 +551,34 @@ class BusClient:
         except urllib.error.URLError as exc:
             return {"status": "error", "code": -1, "detail": f"connection_failed: {exc.reason}"}
 
+    def get_control_event(self, timeout: float = 1.0) -> dict | None:
+        """Long-poll the host for the next control event.
+
+        Returns ``None`` when no event arrived, when the host has no control
+        service, or when the endpoint is not available (an older host). The
+        call blocks for at most ``timeout`` seconds.
+        """
+        if not self._control_token:
+            self.events_supported = False
+            return None
+        url = f"{self._base_url}/control/events?timeout={timeout}"
+        request = urllib.request.Request(
+            url,
+            headers={"Authorization": f"Bearer {self._control_token}"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout + 5.0) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 404, 503):
+                self.events_supported = False
+                return None
+            raise
+        except (urllib.error.URLError, TimeoutError, OSError):
+            return None
+        event = payload.get("event") if isinstance(payload, dict) else None
+        return event if isinstance(event, dict) else None
+
 
 class DashboardClient:
     """Top-level state machine: read layout, fetch PNG, dispatch events."""
@@ -574,6 +605,7 @@ class DashboardClient:
         self._stop = False
         self._layout: Layout | None = None
         self._focus_tile_id: str = ""
+        self._pending_action: tuple[str, str] | None = None
         self.offline_reason: str = ""
 
     # Injectable for tests.
@@ -642,6 +674,58 @@ class DashboardClient:
             return
         result = self._bus.post_control(tile_id=tile.id, action=tile.action)
         LOGGER.info("control dispatched: tile=%s action=%s result=%s", tile.id, tile.action, result)
+        if isinstance(result, dict) and result.get("status") == "ok":
+            # Remember what we are waiting for so the completion event can
+            # trigger an immediate repaint once the host finished the action.
+            self._pending_action = (tile.action, tile.id)
+
+    def _poll_action_completion(self) -> None:
+        """Repaint as soon as the host reports the dispatched action finished.
+
+        Without this the device would only show the result of an action
+        (for example a Hermes quick prompt) on the next periodic refresh.
+        """
+        if self._pending_action is None:
+            return
+        action, tile_id = self._pending_action
+        if not getattr(self._bus, "events_supported", True):
+            # The host has no control-event stream: fall back to the periodic
+            # refresh instead of polling forever.
+            self._pending_action = None
+            return
+        try:
+            event = self._bus.get_control_event(timeout=self._event_poll_seconds)
+        except Exception as error:  # network hiccup: keep waiting
+            LOGGER.debug("control event poll failed: %s", error)
+            return
+        if not event:
+            # Acknowledgements and events for other devices are ignored; the
+            # completion event for our action may still be on its way.
+            return
+        if event.get("phase") is None:
+            # Older host: the event stream has no phase markers, so a
+            # completion can never be recognised.
+            self._pending_action = None
+            return
+        if event.get("phase") != "done":
+            return
+        if event.get("action") != action:
+            return
+        self._pending_action = None
+        LOGGER.info(
+            "action completed: action=%s tile=%s status=%s",
+            action,
+            tile_id,
+            event.get("status"),
+        )
+        try:
+            self._refresh_display()
+            self._exit_offline()
+        except TransientNetworkError as error:
+            self._enter_offline(str(error))
+        except urllib.error.HTTPError as error:
+            LOGGER.error("fatal configuration error (HTTP %d); stopping", error.code)
+            self.stop()
 
     def _focus_neighbor(self, direction: str) -> None:
         if self._layout is None:
@@ -709,6 +793,10 @@ class DashboardClient:
                     return 1
                 last_refresh = time.monotonic()
                 continue
+            # A dispatched action may have finished while we waited for input:
+            # repaint immediately so its result shows up without waiting for
+            # the periodic refresh.
+            self._poll_action_completion()
             if time.monotonic() - last_refresh >= self._refresh_seconds:
                 try:
                     self._refresh_display()

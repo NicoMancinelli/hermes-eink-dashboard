@@ -361,7 +361,7 @@ TOKEN=development-only
 | `GET /dashboard.png` | bearer or `?token=` | deprecated Kindle-compatible E-Ink PNG |
 | `GET /state.json` | bearer or `?token=` | deprecated pre-v1 Hermes state |
 | `POST /control` | bearer (control token) | dispatch a tile action (replay-protected) |
-| `GET /control/events` | bearer (control token) | long-poll for action results |
+| `GET /control/events` | bearer (control token) | long-poll for action results (`phase`: `ack` / `done`) |
 | `GET /pair/devices` | bearer (control token) | list pending/paired devices (no secrets) |
 | `POST /pair/approve` | bearer (control token) | approve a device by display code |
 | `POST /pair/deny` | bearer (control token) | revoke/remove a device |
@@ -428,7 +428,12 @@ The host-side interactive layer is in place:
 
 - Schema v2 tile layout at `GET /dashboard.json` with focus highlighting.
 - `POST /control` validates allowlist, 60s nonce dedup, ±30s timestamp window, and per-action rate limit (default 1/s).
-- `GET /control/events` returns long-poll responses when an action is dispatched.
+- `GET /control/events` returns long-poll responses when an action is dispatched
+  (`phase: "ack"`) and when it finished (`phase: "done"`, published after
+  the panels were re-collected so a device render already shows the result).
+  The event stream is a single shared queue: with several paired devices one
+  device may consume another's event, in which case the affected device falls
+  back to its periodic refresh.
 - `render_layout_dashboard()` paints a tile grid with a 2px focus border around the focused tile.
 - `--layout-yaml` flag loads a custom layout from YAML.
 - `--focus-tile` / `focus_tile_id` query parameter on `/dashboard.png`
@@ -456,10 +461,13 @@ loop in the KUAL bundle does NOT require Python.
 6. On Select (5-way) or tap-up (touch), the client sends
    `POST /control` with the focused tile's `action`.
 7. The host validates, dispatches the handler in a thread pool
-   (so the request returns immediately), and publishes to
+   (so the request returns immediately), and publishes an `ack` event to
    `GET /control/events` long-poll subscribers.
-8. The host's renderer regenerates `/dashboard.png` so the next refresh
-   reflects any state change from the action.
+8. When the handler finishes, the host re-collects the panels and
+   publishes a `done` event (`{"phase": "done", "action", "tile_id",
+   "status"}`). The device repaints on that event, so the result of an
+   action — for example the answer to a quick prompt — appears without
+   waiting for the next periodic refresh.
 
 ## Hermes-native controls (ask the agent from the Kindle)
 
@@ -475,7 +483,9 @@ the service:
   answer is then shown on the device itself in the **Ask Hermes** panel
   (sanitized host-side: ANSI/control characters stripped, whitespace
   collapsed, excerpt hard-capped), so the reply closes the loop on the
-  Kindle instead of staying host-side only.
+  Kindle instead of staying host-side only. The Kindle repaints as soon as
+  the host reports the action finished, so the answer shows up right away
+  instead of at the next periodic refresh.
 - **Model preference** — each `models:` entry becomes a **Model: &lt;alias&gt;**
   tile that selects which model subsequent quick prompts run with
   (`chat -m <alias>`). This is a dashboard-side preference: upstream's own
