@@ -4,6 +4,7 @@
 and with ``load_template()`` stubbed out, so the schema validators, template
 resolution and YAML round-tripping were untested. These cover them directly.
 """
+
 from __future__ import annotations
 
 import re
@@ -93,7 +94,9 @@ class TestTokenValidator:
     def test_url_safe_tokens_are_accepted(self, value: str) -> None:
         assert _schema(dashboard_token=value).dashboard_token == value
 
-    @pytest.mark.parametrize("value", ["with space", "quote\"", "dollar$", "semi;colon", "new\nline"])
+    @pytest.mark.parametrize(
+        "value", ["with space", 'quote"', "dollar$", "semi;colon", "new\nline"]
+    )
     def test_non_url_safe_tokens_are_rejected(self, value: str) -> None:
         with pytest.raises(ValidationError):
             _schema(dashboard_token=value)
@@ -158,11 +161,16 @@ class TestToConfigSh:
     def test_default_template_keeps_the_url_indirection(self) -> None:
         """DASHBOARD_URL must stay unexpanded: config.sh expands it at runtime."""
         rendered = _schema().to_config_sh()
-        assert 'DASHBOARD_URL="http://${HOST_IP}:${HOST_PORT}/dashboard.png?token=${DASHBOARD_TOKEN}"' in rendered
+        assert (
+            'DASHBOARD_URL="http://${HOST_IP}:${HOST_PORT}/dashboard.png?token=${DASHBOARD_TOKEN}"'
+            in rendered
+        )
 
 
 class TestTemplateResolution:
-    def test_prefers_the_environment_override(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_prefers_the_environment_override(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         target = tmp_path / "kindle" / "hermes_dashboard"
         target.mkdir(parents=True)
         template = target / "config.sh.example"
@@ -171,7 +179,9 @@ class TestTemplateResolution:
         monkeypatch.setenv("HERMES_DASHBOARD_PROJECT_ROOT", str(tmp_path))
         assert ConfigManager._resolve_template_path() == template.resolve()
 
-    def test_env_override_pointing_nowhere_falls_back(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_env_override_pointing_nowhere_falls_back(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         monkeypatch.setenv("HERMES_DASHBOARD_PROJECT_ROOT", str(tmp_path / "does-not-exist"))
         # The repo checkout has kindle/hermes_dashboard/config.sh.example, so the
         # upward walk finds it rather than returning the empty fallback path.
@@ -211,7 +221,9 @@ class TestLoad:
 
     def test_invalid_schema_raises(self, tmp_path: Path) -> None:
         path = tmp_path / "config.yaml"
-        path.write_text(yaml.dump({"host_ip": "bad host", "dashboard_token": "t"}), encoding="utf-8")
+        path.write_text(
+            yaml.dump({"host_ip": "bad host", "dashboard_token": "t"}), encoding="utf-8"
+        )
         with pytest.raises(ValidationError):
             ConfigManager(config_path=path).load()
 
@@ -318,6 +330,7 @@ class TestExampleConfig:
         manager.config_path.write_text(manager.get_example_config(), encoding="utf-8")
         assert manager.load() is not None
 
+
 class TestShippedExampleStaysInSync:
     """The bundled example and the embedded template are one artifact.
 
@@ -346,7 +359,7 @@ class TestShippedExampleStaysInSync:
         documented = {
             line.split("=", 1)[0].strip()
             for line in example.read_text(encoding="utf-8").splitlines()
-            if re.match(r'^[A-Z_][A-Z0-9_]*=', line)
+            if re.match(r"^[A-Z_][A-Z0-9_]*=", line)
         }
         scripts = "\n".join(
             path.read_text(encoding="utf-8")

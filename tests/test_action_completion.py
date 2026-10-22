@@ -6,6 +6,7 @@ publishes a completion event *after* re-collecting the panels. The Kindle
 client uses that event to repaint immediately instead of waiting for the
 next periodic refresh.
 """
+
 from __future__ import annotations
 
 import time

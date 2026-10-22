@@ -15,6 +15,7 @@ Usage::
 
     python scripts/verify_release.py dist
 """
+
 from __future__ import annotations
 
 import re
@@ -55,8 +56,19 @@ PLACEHOLDER_MARKERS = re.compile(
 
 # Text files that legitimately carry placeholder tokens or documentation.
 TEXT_SUFFIXES = {
-    ".py", ".sh", ".md", ".txt", ".toml", ".cfg", ".ini", ".yaml", ".yml",
-    ".json", ".xml", ".example", "",
+    ".py",
+    ".sh",
+    ".md",
+    ".txt",
+    ".toml",
+    ".cfg",
+    ".ini",
+    ".yaml",
+    ".yml",
+    ".json",
+    ".xml",
+    ".example",
+    "",
 }
 SKIP_PARTS = {"__pycache__"}
 
@@ -120,9 +132,7 @@ def check_console_scripts(wheel: Path) -> None:
         raise Failure(f"{wheel.name}: no entry_points.txt in the wheel")
 
     with zipfile.ZipFile(wheel) as archive:
-        declared = _declared_console_scripts(
-            archive.read(entry_points).decode("utf-8", "replace")
-        )
+        declared = _declared_console_scripts(archive.read(entry_points).decode("utf-8", "replace"))
     if declared != EXPECTED_CONSOLE_SCRIPTS:
         raise Failure(
             f"{wheel.name}: console scripts {sorted(declared)} != "
@@ -145,8 +155,7 @@ def check_retired_names(paths_by_artifact: dict[str, list[str]]) -> None:
                 offenders.append(f"{artifact}: {name}")
     if offenders:
         raise Failure(
-            f"retired import package {RETIRED_IMPORT!r} still present:\n  "
-            + "\n  ".join(offenders)
+            f"retired import package {RETIRED_IMPORT!r} still present:\n  " + "\n  ".join(offenders)
         )
 
 
@@ -192,9 +201,7 @@ def _scan_text(artifact: str, name: str, text: str, found: list[str]) -> None:
     for match in CREDENTIAL_ASSIGNMENT.finditer(text):
         value = match.group(1)
         if _looks_like_a_real_credential(value):
-            found.append(
-                f"{artifact}:{name}: possible assigned credential: {value[:40]}"
-            )
+            found.append(f"{artifact}:{name}: possible assigned credential: {value[:40]}")
 
 
 def check_no_secrets(dist: Path) -> None:
@@ -262,18 +269,20 @@ def main(argv: list[str]) -> int:
 
     checks = [
         ("console scripts", lambda: check_console_scripts(wheel_paths(dist)[0])),
-        ("retired import package", lambda: check_retired_names(
-            {
-                wheel.name: wheel_entries(wheel) for wheel in wheel_paths(dist)
-            }
-            | {tar.name: sdist_entries(tar) for tar in sdist_paths(dist)}
-        )),
-        ("retired console script", lambda: check_console_script_names(
-            {
-                wheel.name: wheel_entries(wheel) for wheel in wheel_paths(dist)
-            }
-            | {tar.name: sdist_entries(tar) for tar in sdist_paths(dist)}
-        )),
+        (
+            "retired import package",
+            lambda: check_retired_names(
+                {wheel.name: wheel_entries(wheel) for wheel in wheel_paths(dist)}
+                | {tar.name: sdist_entries(tar) for tar in sdist_paths(dist)}
+            ),
+        ),
+        (
+            "retired console script",
+            lambda: check_console_script_names(
+                {wheel.name: wheel_entries(wheel) for wheel in wheel_paths(dist)}
+                | {tar.name: sdist_entries(tar) for tar in sdist_paths(dist)}
+            ),
+        ),
         ("no secrets", lambda: check_no_secrets(dist)),
         ("versions agree", check_versions_agree),
     ]

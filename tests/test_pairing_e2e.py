@@ -5,6 +5,7 @@ exposes /pair/*, a real UDP beacon advertises it, the setup wizard discovers
 the host, registers itself, gets approved through the admin API, receives its
 tokens and writes them into config.sh.
 """
+
 from __future__ import annotations
 
 import json
@@ -71,7 +72,13 @@ def _approve_when_pending(
             pending = [d for d in listing.get("devices", []) if d["status"] == "pending"]
             if pending:
                 code = pending[0]["display_code"]
-                _api(opener, "POST", f"{base_url}/pair/approve", token=CONTROL_TOKEN, payload={"device": code})
+                _api(
+                    opener,
+                    "POST",
+                    f"{base_url}/pair/approve",
+                    token=CONTROL_TOKEN,
+                    payload={"device": code},
+                )
                 result["approved_code"] = code
                 return
         except Exception:
@@ -96,7 +103,9 @@ def test_full_pairing_flow_over_real_sockets(tmp_path: Path) -> None:
     base_url = f"http://127.0.0.1:{tcp_port}"
 
     store = DeviceStore(tmp_path / "devices.json")
-    settings = ApiSettings(token="read-token-e2e", control_token=CONTROL_TOKEN, pairing=PairingService(store))
+    settings = ApiSettings(
+        token="read-token-e2e", control_token=CONTROL_TOKEN, pairing=PairingService(store)
+    )
     app = create_app(settings=settings, aggregators=[])
 
     config = uvicorn.Config(app, host="127.0.0.1", port=tcp_port, log_level="warning")
@@ -107,7 +116,9 @@ def test_full_pairing_flow_over_real_sockets(tmp_path: Path) -> None:
 
     beacon_stop = threading.Event()
     payload = build_beacon_payload(service_port=tcp_port, hostname="e2e-host")
-    beacon_thread = threading.Thread(target=_broadcast_forever, args=(payload, udp_port, beacon_stop), daemon=True)
+    beacon_thread = threading.Thread(
+        target=_broadcast_forever, args=(payload, udp_port, beacon_stop), daemon=True
+    )
     beacon_thread.start()
 
     opener = _direct_opener()
@@ -160,7 +171,11 @@ def test_wizard_times_out_when_never_approved(tmp_path: Path) -> None:
     tcp_port = _free_port(socket.SOCK_STREAM)
     udp_port = _free_port(socket.SOCK_DGRAM)
 
-    settings = ApiSettings(token="r", control_token=CONTROL_TOKEN, pairing=PairingService(DeviceStore(tmp_path / "d.json")))
+    settings = ApiSettings(
+        token="r",
+        control_token=CONTROL_TOKEN,
+        pairing=PairingService(DeviceStore(tmp_path / "d.json")),
+    )
     app = create_app(settings=settings, aggregators=[])
     config = uvicorn.Config(app, host="127.0.0.1", port=tcp_port, log_level="warning")
     server = uvicorn.Server(config)
@@ -170,7 +185,9 @@ def test_wizard_times_out_when_never_approved(tmp_path: Path) -> None:
 
     beacon_stop = threading.Event()
     payload = build_beacon_payload(service_port=tcp_port, hostname="e2e-host")
-    beacon_thread = threading.Thread(target=_broadcast_forever, args=(payload, udp_port, beacon_stop), daemon=True)
+    beacon_thread = threading.Thread(
+        target=_broadcast_forever, args=(payload, udp_port, beacon_stop), daemon=True
+    )
     beacon_thread.start()
 
     opener = _direct_opener()

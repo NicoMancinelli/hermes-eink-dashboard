@@ -1,4 +1,5 @@
 """Tests for the Kindle setup wizard (kindle/client/setup_wizard.py)."""
+
 from __future__ import annotations
 
 import io
@@ -25,13 +26,15 @@ DEVICE_SECRET = "ab" * 32
 
 
 def _beacon_bytes(port: int = 9120, hostname: str = "box", instance: str = "deadbeef") -> bytes:
-    return json.dumps({
-        "service": "hermes-eink-dashboard",
-        "schema": 1,
-        "port": port,
-        "hostname": hostname,
-        "instance": instance,
-    }).encode()
+    return json.dumps(
+        {
+            "service": "hermes-eink-dashboard",
+            "schema": 1,
+            "port": port,
+            "hostname": hostname,
+            "instance": instance,
+        }
+    ).encode()
 
 
 class _FakeSocket:
@@ -76,8 +79,10 @@ def _urlopen_factory(payloads: list[object]):
 @pytest.fixture
 def silent_sink():
     lines_seen: list[tuple[str, ...]] = []
+
     def sink(*lines: str) -> None:
         lines_seen.append(tuple(lines))
+
     sink.lines = lines_seen  # type: ignore[attr-defined]
     return sink
 
@@ -97,31 +102,38 @@ class TestBeaconParsingAndCollection:
         assert parsed == {"port": 9120, "hostname": "box", "instance": "deadbeef"}
         assert parse_beacon(b"junk{") is None
         # Missing keys are rejected.
-        assert parse_beacon(json.dumps({"service": "hermes-eink-dashboard", "schema": 1}).encode()) is None
+        assert (
+            parse_beacon(json.dumps({"service": "hermes-eink-dashboard", "schema": 1}).encode())
+            is None
+        )
 
     def test_collector_dedupes_by_instance(self) -> None:
-        sock = _FakeSocket([
-            _beacon_bytes(instance="aaaa"),
-            _beacon_bytes(instance="aaaa", hostname="box"),   # duplicate instance
-            b"garbage",
-            _beacon_bytes(instance="bbbb", hostname="other"),
-        ])
+        sock = _FakeSocket(
+            [
+                _beacon_bytes(instance="aaaa"),
+                _beacon_bytes(instance="aaaa", hostname="box"),  # duplicate instance
+                b"garbage",
+                _beacon_bytes(instance="bbbb", hostname="other"),
+            ]
+        )
         candidates = BeaconCollector(sock).collect(listen_seconds=0.01)
         assert [candidate["instance"] for candidate in candidates] == ["aaaa", "bbbb"]
         assert all(candidate["address"] == "192.168.1.50" for candidate in candidates)
 
 
 class TestRenderConfig:
-    EXAMPLE = '''HOST_IP="HOST_IP"
+    EXAMPLE = """HOST_IP="HOST_IP"
 HOST_PORT="9120"
 DASHBOARD_TOKEN="CHANGE_ME"
 DASHBOARD_URL="http://${HOST_IP}:${HOST_PORT}/dashboard.png?token=${DASHBOARD_TOKEN}"
 CONTROL_TOKEN=""
 REFRESH_INTERVAL="45"
-'''
+"""
 
     def test_fills_all_connection_values(self) -> None:
-        rendered = render_config(self.EXAMPLE, "192.168.1.7", 9000, "read-token-abc123def456", "ctrl-token-abc123def456")
+        rendered = render_config(
+            self.EXAMPLE, "192.168.1.7", 9000, "read-token-abc123def456", "ctrl-token-abc123def456"
+        )
         assert 'HOST_IP="192.168.1.7"' in rendered
         assert 'HOST_PORT="9000"' in rendered
         assert 'DASHBOARD_TOKEN="read-token-abc123def456"' in rendered
@@ -136,10 +148,25 @@ REFRESH_INTERVAL="45"
 class TestWriteConfig:
     def test_write_config_atomic_private(self, tmp_path: Path) -> None:
         config_path = tmp_path / "config.sh"
-        config_path.write_text('HOST_IP="HOST_IP"\nHOST_PORT="9120"\nDASHBOARD_TOKEN="CHANGE_ME"\nCONTROL_TOKEN=""\n')
-        assert write_config(str(config_path), "", "10.0.0.2", 9120, "read-token-abc123def456", "ctrl-token-abc123def456") is True
+        config_path.write_text(
+            'HOST_IP="HOST_IP"\nHOST_PORT="9120"\nDASHBOARD_TOKEN="CHANGE_ME"\nCONTROL_TOKEN=""\n'
+        )
+        assert (
+            write_config(
+                str(config_path),
+                "",
+                "10.0.0.2",
+                9120,
+                "read-token-abc123def456",
+                "ctrl-token-abc123def456",
+            )
+            is True
+        )
         content = config_path.read_text()
-        assert 'HOST_IP="10.0.0.2"' in content and 'DASHBOARD_TOKEN="read-token-abc123def456"' in content
+        assert (
+            'HOST_IP="10.0.0.2"' in content
+            and 'DASHBOARD_TOKEN="read-token-abc123def456"' in content
+        )
         assert not os.path.exists(str(config_path) + ".part")
         assert config_path.stat().st_mode & 0o777 == 0o600
 
@@ -147,7 +174,10 @@ class TestWriteConfig:
         example = tmp_path / "example.sh"
         example.write_text('HOST_IP="HOST_IP"\n')
         target = tmp_path / "config.sh"
-        assert write_config(str(target), str(example), "10.0.0.2", 9120, "read-token-abc123def456", "") is True
+        assert (
+            write_config(str(target), str(example), "10.0.0.2", 9120, "read-token-abc123def456", "")
+            is True
+        )
         assert 'HOST_IP="10.0.0.2"' in target.read_text()
 
 
@@ -165,19 +195,29 @@ class TestPairingClient:
         assert client.poll("http://h:1", DEVICE_ID, DEVICE_SECRET, "kindle") == "pending"
 
     def test_poll_approved_stores_tokens(self) -> None:
-        client = PairingClient(urlopen=_urlopen_factory([{
-            "status": "approved",
-            "read_token": "read-token-abc123def456",
-            "control_token": "ctrl-token-abc123def456",
-            "device_name": "kindle-ab12",
-        }]))
+        client = PairingClient(
+            urlopen=_urlopen_factory(
+                [
+                    {
+                        "status": "approved",
+                        "read_token": "read-token-abc123def456",
+                        "control_token": "ctrl-token-abc123def456",
+                        "device_name": "kindle-ab12",
+                    }
+                ]
+            )
+        )
         assert client.poll("http://h:1", DEVICE_ID, DEVICE_SECRET, "kindle") == "approved"
         assert client.tokens["read_token"] == "read-token-abc123def456"
 
     def test_poll_http_errors_map_to_statuses(self) -> None:
-        forbidden = PairingClient(urlopen=_urlopen_factory([urllib.error.HTTPError("", 403, "f", None, None)]))
+        forbidden = PairingClient(
+            urlopen=_urlopen_factory([urllib.error.HTTPError("", 403, "f", None, None)])
+        )
         assert forbidden.poll("http://h:1", DEVICE_ID, DEVICE_SECRET, "k") == "forbidden"
-        limited = PairingClient(urlopen=_urlopen_factory([urllib.error.HTTPError("", 429, "r", None, None)]))
+        limited = PairingClient(
+            urlopen=_urlopen_factory([urllib.error.HTTPError("", 429, "r", None, None)])
+        )
         assert limited.poll("http://h:1", DEVICE_ID, DEVICE_SECRET, "k") == "rate_limited"
 
     def test_poll_connection_error(self) -> None:
@@ -211,15 +251,24 @@ class TestRunWizard:
         )
         return code, config_path, calls
 
-    def test_success_flow_writes_tokens(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(setup_wizard, "generate_device_credentials",
-                            lambda: (DEVICE_ID, DEVICE_SECRET, "AB12-CD34"))
+    def test_success_flow_writes_tokens(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            setup_wizard,
+            "generate_device_credentials",
+            lambda: (DEVICE_ID, DEVICE_SECRET, "AB12-CD34"),
+        )
         code, config_path, _ = self._run(
             tmp_path,
             [_beacon_bytes()],
             [
                 {"status": "pending"},
-                {"status": "approved", "read_token": "read-token-abc123def456", "control_token": "ctrl-token-abc123def456"},
+                {
+                    "status": "approved",
+                    "read_token": "read-token-abc123def456",
+                    "control_token": "ctrl-token-abc123def456",
+                },
             ],
         )
         assert code == 0
@@ -233,8 +282,11 @@ class TestRunWizard:
         assert code == 2
 
     def test_forbidden_returns_3(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(setup_wizard, "generate_device_credentials",
-                            lambda: (DEVICE_ID, DEVICE_SECRET, "AB12-CD34"))
+        monkeypatch.setattr(
+            setup_wizard,
+            "generate_device_credentials",
+            lambda: (DEVICE_ID, DEVICE_SECRET, "AB12-CD34"),
+        )
         code, _, _ = self._run(
             tmp_path,
             [_beacon_bytes()],
@@ -242,9 +294,14 @@ class TestRunWizard:
         )
         assert code == 3
 
-    def test_bad_returned_token_returns_4(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(setup_wizard, "generate_device_credentials",
-                            lambda: (DEVICE_ID, DEVICE_SECRET, "AB12-CD34"))
+    def test_bad_returned_token_returns_4(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            setup_wizard,
+            "generate_device_credentials",
+            lambda: (DEVICE_ID, DEVICE_SECRET, "AB12-CD34"),
+        )
         code, _, _ = self._run(
             tmp_path,
             [_beacon_bytes()],
@@ -252,11 +309,16 @@ class TestRunWizard:
         )
         assert code == 4
 
-    def test_unreachable_host_after_discovery_returns_3(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_unreachable_host_after_discovery_returns_3(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import urllib.request as _ur
 
-        monkeypatch.setattr(setup_wizard, "generate_device_credentials",
-                            lambda: (DEVICE_ID, DEVICE_SECRET, "AB12-CD34"))
+        monkeypatch.setattr(
+            setup_wizard,
+            "generate_device_credentials",
+            lambda: (DEVICE_ID, DEVICE_SECRET, "AB12-CD34"),
+        )
 
         def boom(request, timeout=None):
             raise _ur.URLError("refused")

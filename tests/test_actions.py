@@ -42,7 +42,6 @@ def test_action_registry_timestamp_window() -> None:
         registry.dispatch("refresh", tile_id="t1", nonce="n5", ts=969.0, now=now)
 
 
-
 def test_action_registry_nonce_dedup() -> None:
     registry = ActionRegistry(allowlist=["refresh"])
     now = 1000.0

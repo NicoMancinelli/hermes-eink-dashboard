@@ -90,6 +90,7 @@ class ControlBus:
 
     def __init__(self) -> None:
         import threading
+
         self._lock = threading.Lock()
         self._events: list[dict[str, Any]] = []
         self._event = asyncio.Event()
@@ -118,4 +119,3 @@ class ControlBus:
             if self._events:
                 return self._events.pop(0)
             return None
-

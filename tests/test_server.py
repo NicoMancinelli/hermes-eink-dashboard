@@ -114,6 +114,7 @@ def test_dashboard_json_uses_default_layout(dashboard_client) -> None:
 
 def test_dashboard_png_focus_tile_query_param(dashboard_client) -> None:
     import hashlib
+
     client, _ = dashboard_client
 
     resp1 = client.get("/dashboard.png?token=test-token&focus-tile=wf:refresh")
@@ -156,6 +157,3 @@ def test_app_custom_layout_override() -> None:
         assert data["layout"]["columns"] == 2
         assert len(data["tiles"]) == 1
         assert data["tiles"][0]["id"] == "custom:1"
-
-
-

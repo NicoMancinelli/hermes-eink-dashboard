@@ -54,7 +54,6 @@ def test_local_hermes_aggregator_wraps_sync_collector() -> None:
     assert panel["session"]["status"] == "working"
 
 
-
 class _TmpConfig:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -75,7 +74,9 @@ def test_aggregator_surfaces_user_state(tmp_path: Path) -> None:
     cfg = _TmpConfig(tmp_path / "dismissed_alerts.json")
     cfg.write_dismissed("alert-1", "2026-07-25T07:00:00Z")
     cfg.write_dismissed("alert-2", "2026-07-25T07:05:00Z")
-    (tmp_path / "context.json").write_text(json.dumps({"context": "ops-room", "updated_at": "2026-07-25T07:10:00Z"}))
+    (tmp_path / "context.json").write_text(
+        json.dumps({"context": "ops-room", "updated_at": "2026-07-25T07:10:00Z"})
+    )
     collector = FakeCollector(sample_snapshot())
     aggregator = HermesAggregator(collector=collector, interval_seconds=10.0, config_dir=tmp_path)
     panel = asyncio.run(aggregator.collect())

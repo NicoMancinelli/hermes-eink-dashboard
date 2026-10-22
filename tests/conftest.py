@@ -10,6 +10,7 @@ The CI workflow installs ``.[dev]`` which only installs
 not yet a Python distribution, so tests need the repo root to import
 modules from it.
 """
+
 from __future__ import annotations
 
 import sys

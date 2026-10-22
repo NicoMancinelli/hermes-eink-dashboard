@@ -23,6 +23,7 @@ Security posture of the unauthenticated poll endpoint:
 * A coarse global rate limiter bounds polling traffic.
 * All error responses are stable generic codes; no store contents leak.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -208,7 +209,10 @@ class DeviceStore:
             devices = self._load()
             record = devices.get(device_id)
             if record is None:
-                if len([item for item in devices.values() if item.status == "pending"]) >= MAX_PENDING_DEVICES:
+                if (
+                    len([item for item in devices.values() if item.status == "pending"])
+                    >= MAX_PENDING_DEVICES
+                ):
                     return PollResult(status="rate_limited")
                 devices[device_id] = DeviceRecord(
                     device_id=device_id,

@@ -48,11 +48,13 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -e '.[dev]'
-      - name: Ruff
-        # `ruff check` is the enforced gate. `ruff format` is deliberately not
-        # run: the tree predates ruff-format and reformatting 45 files would
-        # bury the v1.0.0 release diff in cosmetic churn.
+      - name: Ruff lint
         run: ruff check src tests scripts kindle
+      - name: Ruff format
+        # The tree was reformatted wholesale once v1.0.0 was tagged, so the
+        # release diff stayed readable. From here on the formatter is kept in
+        # step automatically.
+        run: ruff format --check src tests scripts kindle
       - name: Mypy
         run: mypy src/hermes_eink_dashboard
 

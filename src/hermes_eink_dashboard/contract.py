@@ -180,7 +180,9 @@ def dashboard_json(
             tiles.append(item)
 
     focus_dict = None
-    target_id = focus_tile_id or (layout.get("focus", {}).get("tile_id") if isinstance(layout.get("focus"), dict) else None)
+    target_id = focus_tile_id or (
+        layout.get("focus", {}).get("tile_id") if isinstance(layout.get("focus"), dict) else None
+    )
     if target_id:
         for t in tile_objs:
             if t.id == target_id:
@@ -297,5 +299,3 @@ def build_default_layout(
         "tiles": tiles,
     }
     return dashboard_json(layout_spec)
-
-

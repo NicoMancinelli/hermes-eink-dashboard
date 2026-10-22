@@ -11,6 +11,7 @@ The beacon carries no tokens or private data — only *where* the service
 lives. Broadcasts do not traverse routers; clients outside the segment can
 still configure the host address manually. Disable with ``--no-discovery``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -75,7 +76,9 @@ def _open_broadcast_socket() -> socket.socket:
     return sock
 
 
-def broadcast_once(sock: socket.socket, payload: bytes, destinations: tuple[str, ...], port: int) -> None:
+def broadcast_once(
+    sock: socket.socket, payload: bytes, destinations: tuple[str, ...], port: int
+) -> None:
     """Send one datagram to every destination, ignoring per-target failures."""
     for address in destinations:
         try:

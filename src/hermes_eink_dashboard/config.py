@@ -35,11 +35,21 @@ class ConfigSchema(BaseModel):
     )
 
     # E-Ink/power settings
-    refresh_interval: int = Field(default=45, ge=5, le=3600, description="Seconds between dashboard refreshes")
-    download_timeout: int = Field(default=12, ge=1, le=120, description="Per-request timeout in seconds")
-    full_refresh_every: int = Field(default=10, ge=1, le=1000, description="Force full refresh every N cycles")
-    keep_awake: int = Field(default=1, ge=0, le=1, description="Keep Kindle awake while dashboard runs (0/1)")
-    stop_framework: int = Field(default=1, ge=0, le=1, description="Stop Kindle framework while dashboard runs (0/1)")
+    refresh_interval: int = Field(
+        default=45, ge=5, le=3600, description="Seconds between dashboard refreshes"
+    )
+    download_timeout: int = Field(
+        default=12, ge=1, le=120, description="Per-request timeout in seconds"
+    )
+    full_refresh_every: int = Field(
+        default=10, ge=1, le=1000, description="Force full refresh every N cycles"
+    )
+    keep_awake: int = Field(
+        default=1, ge=0, le=1, description="Keep Kindle awake while dashboard runs (0/1)"
+    )
+    stop_framework: int = Field(
+        default=1, ge=0, le=1, description="Stop Kindle framework while dashboard runs (0/1)"
+    )
 
     # Usually auto-detected
     fbink: str = Field(default="", description="Override path to fbink (auto-detected by default)")
@@ -54,7 +64,9 @@ class ConfigSchema(BaseModel):
     @classmethod
     def validate_host_ip(cls, v: str) -> str:
         if not re.fullmatch(r"^[A-Za-z0-9._:-]+$", v):
-            raise ValueError("host_ip may contain only letters, numbers, dots, colons, underscores, and hyphens")
+            raise ValueError(
+                "host_ip may contain only letters, numbers, dots, colons, underscores, and hyphens"
+            )
         return v
 
     @field_validator("dashboard_token", "control_token")
@@ -64,7 +76,9 @@ class ConfigSchema(BaseModel):
         if field_name == "dashboard_token" and not v:
             raise ValueError("dashboard_token is required and must be non-empty")
         if v and not re.fullmatch(r"^[A-Za-z0-9._~-]+$", v):
-            raise ValueError(f"{field_name} must be URL-safe (alphanumeric, dot, underscore, tilde, hyphen)")
+            raise ValueError(
+                f"{field_name} must be URL-safe (alphanumeric, dot, underscore, tilde, hyphen)"
+            )
         return v
 
     def to_config_sh(self, template: str | None = None) -> str:
@@ -156,9 +170,7 @@ class ConfigManager:
     config_path: Path = field(
         default_factory=lambda: (resolve_config_dir() / "config.yaml").expanduser()
     )
-    template_path: Path = field(
-        default_factory=lambda: ConfigManager._resolve_template_path()
-    )
+    template_path: Path = field(default_factory=lambda: ConfigManager._resolve_template_path())
 
     @property
     def safe_output_path(self) -> Path:
@@ -186,9 +198,12 @@ class ConfigManager:
         3. Final fallback: relative to this file's grandparent.
         """
         import os
+
         env_root = os.environ.get("HERMES_DASHBOARD_PROJECT_ROOT")
         if env_root:
-            candidate = Path(env_root).expanduser() / "kindle" / "hermes_dashboard" / "config.sh.example"
+            candidate = (
+                Path(env_root).expanduser() / "kindle" / "hermes_dashboard" / "config.sh.example"
+            )
             if candidate.exists():
                 return candidate.resolve()
         current = Path(__file__).resolve().parent
@@ -197,7 +212,12 @@ class ConfigManager:
             if candidate.exists():
                 return candidate.resolve()
             current = current.parent
-        return (Path(__file__).resolve().parent.parent.parent / "kindle" / "hermes_dashboard" / "config.sh.example")
+        return (
+            Path(__file__).resolve().parent.parent.parent
+            / "kindle"
+            / "hermes_dashboard"
+            / "config.sh.example"
+        )
 
     def __post_init__(self) -> None:
         self.config_path = self.config_path.expanduser()

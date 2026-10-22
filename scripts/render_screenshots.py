@@ -12,6 +12,7 @@ Run from the repo root:
 
     .venv/bin/python scripts/render_screenshots.py
 """
+
 from __future__ import annotations
 
 import json

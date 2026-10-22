@@ -31,7 +31,10 @@ def test_systemd_unit_uses_private_config_and_restart_policy() -> None:
     service = parser["Service"]
     assert service["EnvironmentFile"] == "%h/.config/hermes-eink-dashboard/host.env"
     assert service["Environment"] == "PYTHONPATH="
-    assert "%h/.local/share/hermes-eink-dashboard/venv/bin/hermes-eink-dashboard" in service["ExecStart"]
+    assert (
+        "%h/.local/share/hermes-eink-dashboard/venv/bin/hermes-eink-dashboard"
+        in service["ExecStart"]
+    )
     assert service["Restart"] == "on-failure"
     assert service["NoNewPrivileges"] == "true"
 
@@ -126,10 +129,14 @@ def test_post_install_script_replaces_placeholders(tmp_path: Path) -> None:
         [
             "sh",
             str(script),
-            "--host", "10.0.0.42",
-            "--port", "9120",
-            "--read-token", "tok",
-            "--control-token", "ctrl",
+            "--host",
+            "10.0.0.42",
+            "--port",
+            "9120",
+            "--read-token",
+            "tok",
+            "--control-token",
+            "ctrl",
         ],
         cwd=str(tmp_path / "bundle" / "hermes_dashboard"),
         check=True,
@@ -138,8 +145,7 @@ def test_post_install_script_replaces_placeholders(tmp_path: Path) -> None:
     assert 'HOST_IP="10.0.0.42"' in config_text
     assert 'DASHBOARD_TOKEN="tok"' in config_text
     assert 'CONTROL_TOKEN="ctrl"' in config_text
-    assert 'PLACEHOLDER_TOKEN' not in config_text
-
+    assert "PLACEHOLDER_TOKEN" not in config_text
 
 
 def test_host_installer_generates_control_token(tmp_path: Path) -> None:
@@ -148,7 +154,8 @@ def test_host_installer_generates_control_token(tmp_path: Path) -> None:
         [
             "sh",
             str(ROOT / "scripts/install_host.sh"),
-            "--bind", "127.0.0.1",
+            "--bind",
+            "127.0.0.1",
             "--no-start",
         ],
         env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"},
@@ -182,7 +189,8 @@ def test_host_installer_migrates_pre_consolidation_config(tmp_path: Path) -> Non
         [
             "sh",
             str(ROOT / "scripts/install_host.sh"),
-            "--bind", "127.0.0.1",
+            "--bind",
+            "127.0.0.1",
             "--no-start",
         ],
         env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"},
@@ -201,6 +209,112 @@ def test_host_installer_migrates_pre_consolidation_config(tmp_path: Path) -> Non
     assert not legacy_dir.exists()
     assert (tmp_path / ".config/hermes-kindle-dashboard.migrated" / "token").exists()
 
+
+def _read_host_env(tmp_path: Path) -> dict[str, str]:
+    """Parse host.env written by the installer into a dict."""
+    text = (tmp_path / ".config/hermes-eink-dashboard/host.env").read_text()
+    values = {}
+    for line in text.splitlines():
+        if line.strip() and not line.startswith("#") and "=" in line:
+            key, _, value = line.partition("=")
+            values[key.strip()] = value.strip()
+    return values
+
+
+def test_host_installer_upgrade_preserves_settings(tmp_path: Path) -> None:
+    """Re-running the installer to upgrade must not reset existing settings.
+
+    host.env is rewritten wholesale on every run, so before this was fixed a
+    bare `install_host.sh` upgrade reverted a LAN bind address to loopback
+    and stranded an already-paired Kindle. Options that are not passed
+    explicitly are inherited from the existing host.env instead.
+    """
+    env = {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}
+    installer = str(ROOT / "scripts/install_host.sh")
+
+    subprocess.run(
+        [
+            "sh",
+            installer,
+            "--bind",
+            "192.168.1.50",
+            "--port",
+            "9120",
+            "--context-limit",
+            "131072",
+            "--refresh-seconds",
+            "45",
+            "--no-start",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    before = _read_host_env(tmp_path)
+    assert before["HERMES_DASHBOARD_HOST"] == "192.168.1.50"
+    assert before["HERMES_DASHBOARD_CONTEXT_LIMIT"] == "131072"
+    assert before["HERMES_DASHBOARD_REFRESH_SECONDS"] == "45"
+
+    token_before = (tmp_path / ".config/hermes-eink-dashboard/token").read_text()
+
+    # Bare upgrade: no options at all.
+    subprocess.run(
+        ["sh", installer, "--no-start"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    after = _read_host_env(tmp_path)
+    assert after["HERMES_DASHBOARD_HOST"] == "192.168.1.50"
+    assert after["HERMES_DASHBOARD_PORT"] == "9120"
+    assert after["HERMES_DASHBOARD_CONTEXT_LIMIT"] == "131072"
+    assert after["HERMES_DASHBOARD_REFRESH_SECONDS"] == "45"
+    # Tokens are only minted when absent, so a paired Kindle stays paired.
+    assert (tmp_path / ".config/hermes-eink-dashboard/token").read_text() == token_before
+
+
+def test_host_installer_explicit_option_overrides_inherited_value(tmp_path: Path) -> None:
+    """An option passed on the command line still wins over the stored value."""
+    env = {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}
+    installer = str(ROOT / "scripts/install_host.sh")
+
+    subprocess.run(
+        ["sh", installer, "--bind", "192.168.1.50", "--refresh-seconds", "45", "--no-start"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    # Only --port changes; everything else must be inherited.
+    subprocess.run(
+        ["sh", installer, "--port", "9300", "--no-start"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    values = _read_host_env(tmp_path)
+    assert values["HERMES_DASHBOARD_PORT"] == "9300"
+    assert values["HERMES_DASHBOARD_HOST"] == "192.168.1.50"
+    assert values["HERMES_DASHBOARD_REFRESH_SECONDS"] == "45"
+
+
+def test_host_installer_rejects_invalid_inherited_value(tmp_path: Path) -> None:
+    """Inherited values are re-validated, since host.env is user-editable."""
+    config_dir = tmp_path / ".config/hermes-eink-dashboard"
+    config_dir.mkdir(parents=True)
+    (config_dir / "host.env").write_text("HERMES_DASHBOARD_HOST=; rm -rf /\n")
+
+    result = subprocess.run(
+        ["sh", str(ROOT / "scripts/install_host.sh"), "--no-start"],
+        env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "Bind address contains invalid characters" in result.stderr
 
 
 def test_post_install_then_start_interactive_e2e(tmp_path: Path) -> None:
@@ -252,9 +366,12 @@ def test_post_install_then_start_interactive_e2e(tmp_path: Path) -> None:
         [
             "sh",
             str(ext / "bin" / "post_install.sh"),
-            "--host", "10.0.0.42",
-            "--read-token", "rt",
-            "--control-token", "ct",
+            "--host",
+            "10.0.0.42",
+            "--read-token",
+            "rt",
+            "--control-token",
+            "ct",
         ],
         cwd=str(ext),
         check=True,

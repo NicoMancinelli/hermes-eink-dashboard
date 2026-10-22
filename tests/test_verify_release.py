@@ -7,6 +7,7 @@ wheel/sdist and asserts the corresponding check passes or blocks.
 The checks deliberately err toward *not* blocking: a gate that cries wolf gets
 disabled, and a disabled gate blocks nothing. Both directions are covered here.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -30,7 +31,9 @@ def _load_module():
 
 verify = _load_module()
 
-ENTRY_POINTS_OK = "[console_scripts]\nhermes-eink-dashboard = a:main\nhermes-dashboard-pair = b:main\n"
+ENTRY_POINTS_OK = (
+    "[console_scripts]\nhermes-eink-dashboard = a:main\nhermes-dashboard-pair = b:main\n"
+)
 ENTRY_POINTS_LEGACY = (
     "[console_scripts]\nhermes-eink-dashboard = a:main\n"
     "hermes-dashboard-pair = b:main\nhermes-kindle-dashboard = a:main\n"
@@ -56,9 +59,7 @@ def build_wheel(
     wheel = dist / "hermes_eink_dashboard-1.0.0-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr("hermes_eink_dashboard/__init__.py", "__version__ = '1.0.0'\n")
-        archive.writestr(
-            "hermes_eink_dashboard-1.0.0.dist-info/entry_points.txt", entry_points
-        )
+        archive.writestr("hermes_eink_dashboard-1.0.0.dist-info/entry_points.txt", entry_points)
         for name, text in (extra_files or {}).items():
             archive.writestr(name, text)
     return wheel
@@ -111,9 +112,7 @@ class TestRetiredNames:
 
     def test_rejects_a_surviving_import_package(self, tmp_path: Path) -> None:
         with pytest.raises(verify.Failure, match="retired import package"):
-            verify.check_retired_names(
-                {"wheel": ["hermes_kindle_dashboard/__init__.py"]}
-            )
+            verify.check_retired_names({"wheel": ["hermes_kindle_dashboard/__init__.py"]})
 
     def test_rejects_a_surviving_installed_script(self, tmp_path: Path) -> None:
         with pytest.raises(verify.Failure, match="retired console script"):
@@ -130,7 +129,7 @@ class TestSecretScanning:
             'DASHBOARD_TOKEN="CHANGE_ME"',
             'dashboard_token="your-read-token-here"',
             'CONTROL_TOKEN = "control-token-456"',
-            'password: ${HERMES_PASSWORD}',
+            "password: ${HERMES_PASSWORD}",
             'api_key = os.environ["API_KEY"]',
         ],
     )
@@ -152,9 +151,7 @@ class TestSecretScanning:
             (f'CONTROL_TOKEN = "{FAKE_GENERIC_TOKEN}"', "assigned credential"),
         ],
     )
-    def test_real_credentials_block(
-        self, tmp_path: Path, text: str, expected: str
-    ) -> None:
+    def test_real_credentials_block(self, tmp_path: Path, text: str, expected: str) -> None:
         build_wheel(tmp_path, extra_files={"hermes_eink_dashboard/config.py": text})
         build_sdist(tmp_path)
         with pytest.raises(verify.Failure) as excinfo:
@@ -165,9 +162,7 @@ class TestSecretScanning:
         build_wheel(tmp_path)
         build_sdist(
             tmp_path,
-            extra_files={
-                "hermes_eink_dashboard-1.0.0/leak.py": f'TOKEN = "{FAKE_OPENAI_KEY}"'
-            },
+            extra_files={"hermes_eink_dashboard-1.0.0/leak.py": f'TOKEN = "{FAKE_OPENAI_KEY}"'},
         )
         with pytest.raises(verify.Failure, match="OpenAI-style key"):
             verify.check_no_secrets(tmp_path)
@@ -219,9 +214,7 @@ class TestVersionAgreement:
         with pytest.raises(verify.Failure, match="could not read"):
             verify.check_versions_agree()
 
-    def test_reports_a_missing_file_clearly(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_reports_a_missing_file_clearly(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setattr(verify, "REPO_ROOT", tmp_path)
         with pytest.raises(verify.Failure, match="missing version source"):
             verify.check_versions_agree()

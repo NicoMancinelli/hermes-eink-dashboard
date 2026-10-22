@@ -15,6 +15,7 @@ Sanitization follows the project's privacy rules:
 * excerpts are hard-capped, so a chatty answer can never blow up a render;
 * history entries carry names/status/timestamps only, never text.
 """
+
 from __future__ import annotations
 
 import asyncio

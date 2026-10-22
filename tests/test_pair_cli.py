@@ -6,6 +6,7 @@ the actual routes rather than a hand-rolled fake. ``test_pairing_api.py``
 covers the routes themselves and only touches the CLI's two argument-validation
 branches; everything below closes the rest of the dispatch body.
 """
+
 from __future__ import annotations
 
 import io
@@ -143,11 +144,15 @@ class TestArgumentAndTokenValidation:
         assert cli_main(["deny", "--control-token-file", str(tmp_path / "absent")]) == 2
         assert "requires a display code" in capsys.readouterr().err
 
-    def test_whitespace_only_device_is_rejected(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    def test_whitespace_only_device_is_rejected(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
         assert cli_main(["approve", "   ", "--control-token-file", str(tmp_path / "absent")]) == 2
         assert "requires a display code" in capsys.readouterr().err
 
-    def test_missing_token_file_names_the_path(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    def test_missing_token_file_names_the_path(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
         missing = tmp_path / "absent"
         assert cli_main(["list", "--control-token-file", str(missing)]) == 1
         err = capsys.readouterr().err
@@ -155,7 +160,9 @@ class TestArgumentAndTokenValidation:
         assert str(missing) in err
         assert "install_host.sh" in err
 
-    def test_blank_token_file_is_treated_as_missing(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    def test_blank_token_file_is_treated_as_missing(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
         path = tmp_path / "control_token"
         path.write_text("   \n", encoding="utf-8")
         assert cli_main(["list", "--control-token-file", str(path)]) == 1
@@ -230,7 +237,9 @@ class TestApprove:
         assert approved["control_token"]
         assert approved["device_name"] == DEVICE_NAME
 
-    def test_device_name_with_a_space_is_rejected_by_the_store(self, live_host, token_file, capsys) -> None:
+    def test_device_name_with_a_space_is_rejected_by_the_store(
+        self, live_host, token_file, capsys
+    ) -> None:
         """Names are shell-rendered on the Kindle, so the store refuses spaces.
 
         The CLI surfaces that as a plain 400 rather than crashing.
@@ -381,9 +390,7 @@ class TestRequestHelper:
         body = json.dumps({"detail": "rate_limited"}).encode("utf-8")
 
         def fake(request, timeout=None):
-            raise urllib.error.HTTPError(
-                "http://h", 429, "Too Many", None, io.BytesIO(body)
-            )
+            raise urllib.error.HTTPError("http://h", 429, "Too Many", None, io.BytesIO(body))
 
         self._patched(monkeypatch, fake)
         assert pair_cli._request("http://h", "/pair/devices", "tok") == (
@@ -397,7 +404,10 @@ class TestRequestHelper:
 
         def fake(request, timeout=None):
             raise urllib.error.HTTPError(
-                "http://h", 503, "Bad Gateway", None,
+                "http://h",
+                503,
+                "Bad Gateway",
+                None,
                 io.BytesIO(b"<html>502 Bad Gateway</html>"),
             )
 

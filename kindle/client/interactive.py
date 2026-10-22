@@ -16,6 +16,7 @@ Architecture:
 - DashboardClient: state machine that pulls layout, polls PNG, dispatches
   control events.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -111,7 +112,13 @@ class Layout:
         tiles = tuple(Tile.from_dict(t) for t in data.get("tiles", []))
         focus = data.get("focus", {})
         grid_size = layout.get("grid_size", [1072, 1448])
-        tile_size = layout.get("tile_size", [grid_size[0] // max(1, int(layout.get("columns", 4))), grid_size[1] // max(1, int(layout.get("rows", 6)))])
+        tile_size = layout.get(
+            "tile_size",
+            [
+                grid_size[0] // max(1, int(layout.get("columns", 4))),
+                grid_size[1] // max(1, int(layout.get("rows", 6))),
+            ],
+        )
         return cls(
             columns=int(layout.get("columns", 4)),
             rows=int(layout.get("rows", 6)),
@@ -141,13 +148,21 @@ class Layout:
             )
 
         if direction == "left":
-            candidates = [t for t in self.tiles if t.col + t.w <= target.col and overlaps(t, target)]
+            candidates = [
+                t for t in self.tiles if t.col + t.w <= target.col and overlaps(t, target)
+            ]
         elif direction == "right":
-            candidates = [t for t in self.tiles if target.col + target.w <= t.col and overlaps(t, target)]
+            candidates = [
+                t for t in self.tiles if target.col + target.w <= t.col and overlaps(t, target)
+            ]
         elif direction == "up":
-            candidates = [t for t in self.tiles if t.row + t.h <= target.row and overlaps(t, target)]
+            candidates = [
+                t for t in self.tiles if t.row + t.h <= target.row and overlaps(t, target)
+            ]
         elif direction == "down":
-            candidates = [t for t in self.tiles if target.row + target.h <= t.row and overlaps(t, target)]
+            candidates = [
+                t for t in self.tiles if target.row + target.h <= t.row and overlaps(t, target)
+            ]
         else:
             return None
         if not candidates:
@@ -155,7 +170,9 @@ class Layout:
         # Pick the candidate with the smallest Euclidean distance to the target's center.
         tcx = target.col + target.w / 2.0
         tcy = target.row + target.h / 2.0
-        candidates.sort(key=lambda t: (tcx - (t.col + t.w / 2.0)) ** 2 + (tcy - (t.row + t.h / 2.0)) ** 2)
+        candidates.sort(
+            key=lambda t: (tcx - (t.col + t.w / 2.0)) ** 2 + (tcy - (t.row + t.h / 2.0)) ** 2
+        )
         return candidates[0].id
 
     def tile_at(self, x: float, y: float) -> str | None:
@@ -173,6 +190,7 @@ class Layout:
             if tile_left <= x < tile_right and tile_top <= y < tile_bottom:
                 return tile.id
         return None
+
     """Protocol for input sources on the Kindle and in tests."""
 
     def next_event(self, timeout: float) -> InputEvent | None:
@@ -474,10 +492,19 @@ class FbinkPainter:
             font_spec = f"regular={regular}"
             if os.path.exists(bold):
                 font_spec += f",bold={bold}"
-            if self._run_fbink(["-c", "-f", "-m", "-M", "-t", f"{font_spec},size=24,left=35,right=35,format", formatted]):
+            if self._run_fbink(
+                [
+                    "-c",
+                    "-f",
+                    "-m",
+                    "-M",
+                    "-t",
+                    f"{font_spec},size=24,left=35,right=35,format",
+                    formatted,
+                ]
+            ):
                 return True
         return self._run_fbink(["-c", "-f", "-m", "-M", "-S", "2", plain])
-
 
 
 class BusClient:
@@ -544,7 +571,11 @@ class BusClient:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            return {"status": "error", "code": exc.code, "detail": exc.read().decode("utf-8", errors="replace")[:200]}
+            return {
+                "status": "error",
+                "code": exc.code,
+                "detail": exc.read().decode("utf-8", errors="replace")[:200],
+            }
         except urllib.error.URLError as exc:
             return {"status": "error", "code": -1, "detail": f"connection_failed: {exc.reason}"}
 
@@ -623,9 +654,14 @@ class DashboardClient:
                     raise
                 last_error = error
                 if attempt < self._retry_attempts - 1:
-                    delay = self._retry_backoff * (2 ** attempt)
-                    LOGGER.warning("transient network error (%s); retry %d/%d in %.1fs",
-                                   error, attempt + 1, self._retry_attempts, delay)
+                    delay = self._retry_backoff * (2**attempt)
+                    LOGGER.warning(
+                        "transient network error (%s); retry %d/%d in %.1fs",
+                        error,
+                        attempt + 1,
+                        self._retry_attempts,
+                        delay,
+                    )
                     self._sleep(delay)
         raise TransientNetworkError(str(last_error)) from last_error
 
@@ -815,28 +851,56 @@ def _build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--control-token", default=os.getenv("HERMES_DASHBOARD_CONTROL_TOKEN", ""))
     parser.add_argument("--image", default="/tmp/hermes-dashboard.png")
     parser.add_argument("--refresh-seconds", type=float, default=15.0)
-    parser.add_argument("--input-device", default="/dev/input/event0", help="5-way controller (e.g. /dev/input/event0)")
-    parser.add_argument("--touch-device", default="/dev/input/event1", help="Touchscreen device. Empty to disable touch.")
-    parser.add_argument("--touch-device-size", default="", help="WxH of the touch device in pixels (e.g. 1072x1448). Empty = no rescale.")
-    parser.add_argument("--mock-events", default="", help="JSON list of InputEvent dicts for harness testing")
+    parser.add_argument(
+        "--input-device",
+        default="/dev/input/event0",
+        help="5-way controller (e.g. /dev/input/event0)",
+    )
+    parser.add_argument(
+        "--touch-device",
+        default="/dev/input/event1",
+        help="Touchscreen device. Empty to disable touch.",
+    )
+    parser.add_argument(
+        "--touch-device-size",
+        default="",
+        help="WxH of the touch device in pixels (e.g. 1072x1448). Empty = no rescale.",
+    )
+    parser.add_argument(
+        "--mock-events", default="", help="JSON list of InputEvent dicts for harness testing"
+    )
     parser.add_argument(
         "--no-fbink",
         action="store_true",
         help="do not blit to the framebuffer (PNG is still written; useful in harnesses)",
     )
     parser.add_argument("--fbink-path", default="", help="explicit path to the fbink binary")
-    parser.add_argument("--full-refresh-every", type=int, default=10, help="full e-ink flash every N paints")
-    parser.add_argument("--retry-attempts", type=int, default=3, help="network retries per refresh before going offline")
-    parser.add_argument("--retry-backoff", type=float, default=1.0, help="base backoff seconds between retries (exponential)")
+    parser.add_argument(
+        "--full-refresh-every", type=int, default=10, help="full e-ink flash every N paints"
+    )
+    parser.add_argument(
+        "--retry-attempts",
+        type=int,
+        default=3,
+        help="network retries per refresh before going offline",
+    )
+    parser.add_argument(
+        "--retry-backoff",
+        type=float,
+        default=1.0,
+        help="base backoff seconds between retries (exponential)",
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     return parser
 
 
 def _install_signal_handlers(client: DashboardClient) -> None:
     """Wire SIGTERM/SIGINT to a cooperative stop on the client."""
+
     def _handler(signum: int, _frame: object) -> None:
         LOGGER.info("received signal %s; stopping", signum)
         client.stop()
+
     signal.signal(signal.SIGTERM, _handler)
     signal.signal(signal.SIGINT, _handler)
 

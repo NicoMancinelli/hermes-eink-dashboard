@@ -12,6 +12,7 @@ What runs for real: the ``python -m kindle.client.interactive`` process, its
 arg parsing, HTTP stack, retry/offline state machine and display calls,
 against a live uvicorn host over real sockets.
 """
+
 from __future__ import annotations
 
 import os
@@ -78,15 +79,24 @@ def _launch_client(port: int, tmp_path: Path, stub_bin: Path, stub_dir: Path) ->
         sys.executable,
         "-m",
         "kindle.client.interactive",
-        "--host", "127.0.0.1",
-        "--port", str(port),
-        "--read-token", "read-token-sim",
-        "--image", str(tmp_path / "dash.png"),
-        "--refresh-seconds", "0.3",
-        "--retry-attempts", "2",
-        "--retry-backoff", "0.05",
-        "--full-refresh-every", "3",
-        "--fbink-path", str(stub_bin / "fbink"),
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
+        "--read-token",
+        "read-token-sim",
+        "--image",
+        str(tmp_path / "dash.png"),
+        "--refresh-seconds",
+        "0.3",
+        "--retry-attempts",
+        "2",
+        "--retry-backoff",
+        "0.05",
+        "--full-refresh-every",
+        "3",
+        "--fbink-path",
+        str(stub_bin / "fbink"),
     ]
     env = dict(os.environ)
     env["FBINK_STUB_DIR"] = str(stub_dir)
@@ -137,7 +147,9 @@ def test_real_client_paints_survives_outage_and_exits_cleanly(tmp_path: Path) ->
         # 2. Host dies -> client must stay alive and draw the offline screen.
         server.should_exit = True
         host_thread.join(timeout=5)
-        _wait_for(lambda: "text" in (stub_dir / "fbink.log").read_text(), message="offline text screen")
+        _wait_for(
+            lambda: "text" in (stub_dir / "fbink.log").read_text(), message="offline text screen"
+        )
         assert process.poll() is None, "client crashed during outage"
 
         # Offline screen must be drawn once, not repeatedly.
@@ -176,17 +188,27 @@ def test_client_reports_fatal_auth_error(tmp_path: Path) -> None:
         sys.executable,
         "-m",
         "kindle.client.interactive",
-        "--host", "127.0.0.1",
-        "--port", str(port),
-        "--read-token", "WRONG",
-        "--image", str(tmp_path / "x.png"),
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
+        "--read-token",
+        "WRONG",
+        "--image",
+        str(tmp_path / "x.png"),
         "--no-fbink",
     ]
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT)
     try:
-        process = subprocess.Popen(command, cwd=str(ROOT), env=env,
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        process = subprocess.Popen(
+            command,
+            cwd=str(ROOT),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
         code = process.wait(timeout=15)
         assert code == 1  # fatal config error exits fast instead of retrying forever
     finally:

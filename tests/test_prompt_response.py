@@ -5,6 +5,7 @@ Tapping ``hermes.prompt.<name>`` writes the agent's answer to
 sanitizer, the panel builder/aggregator, layout integration, rendering at
 both supported sizes, and the end-to-end API path.
 """
+
 from __future__ import annotations
 
 import json
@@ -193,7 +194,11 @@ def test_layout_render_paints_prompt_response_panel(tmp_path: Path, size: tuple[
     _write_result(
         tmp_path,
         "summarize_inbox",
-        _ok_payload("summarize_inbox", "Three unread threads, all low priority.", "2026-07-24T19:00:00+00:00"),
+        _ok_payload(
+            "summarize_inbox",
+            "Three unread threads, all low priority.",
+            "2026-07-24T19:00:00+00:00",
+        ),
     )
     cache = PanelCache()
     cache.register("hermes")
@@ -324,7 +329,12 @@ def test_ask_tile_dispatch_lands_on_the_device_panel(tmp_path: Path) -> None:
         resp = client.post(
             "/control",
             headers={"Authorization": "Bearer control-token"},
-            json={"action": "hermes.prompt.standup", "tile_id": "t1", "nonce": "n1", "ts": time.time()},
+            json={
+                "action": "hermes.prompt.standup",
+                "tile_id": "t1",
+                "nonce": "n1",
+                "ts": time.time(),
+            },
         )
         assert resp.status_code == 200
 
@@ -334,7 +344,9 @@ def test_ask_tile_dispatch_lands_on_the_device_panel(tmp_path: Path) -> None:
         registry.wait_for_pending()
         asyncio.run(collect_once(aggregator, client.app.state.panel_cache))
 
-        payload = client.get("/dashboard-data", headers={"Authorization": "Bearer read-token"}).json()
+        payload = client.get(
+            "/dashboard-data", headers={"Authorization": "Bearer read-token"}
+        ).json()
 
     assert transport.calls == 1
     panel = payload["panels"]["prompt_response"]

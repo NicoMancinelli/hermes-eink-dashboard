@@ -1,4 +1,5 @@
 """Tests for the device pairing store, service and HTTP endpoints."""
+
 from __future__ import annotations
 
 import json
@@ -93,7 +94,9 @@ class TestDeviceStore:
         # And it can still be used afterwards.
         assert DeviceStore(path).register(DEVICE_ID, DEVICE_SECRET, "kindle").status == "pending"
 
-    def test_store_file_written_with_private_permissions(self, store: DeviceStore, tmp_path: Path) -> None:
+    def test_store_file_written_with_private_permissions(
+        self, store: DeviceStore, tmp_path: Path
+    ) -> None:
         store.register(DEVICE_ID, DEVICE_SECRET, "kindle")
         mode = (tmp_path / "devices.json").stat().st_mode & 0o777
         assert mode == 0o600
@@ -126,7 +129,9 @@ class TestPairingService:
         with pytest.raises(PairingValidationError):
             pairing.poll(DEVICE_ID, "short")
 
-    def test_poll_rate_limited(self, pairing: PairingService, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_poll_rate_limited(
+        self, pairing: PairingService, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from hermes_eink_dashboard import pairing as pairing_module
 
         monkeypatch.setattr(pairing_module, "POLL_RATE_LIMIT_PER_MINUTE", 3)
@@ -166,7 +171,9 @@ class TestPairingEndpoints:
         assert devices[0]["status"] == "pending"
 
         # 3. Admin approves by display code.
-        approve = client.post("/pair/approve", headers=admin, json={"device": display_code_for(DEVICE_ID)})
+        approve = client.post(
+            "/pair/approve", headers=admin, json={"device": display_code_for(DEVICE_ID)}
+        )
         assert approve.status_code == 200
 
         # 4. Device polls again and receives its tokens.
@@ -179,8 +186,9 @@ class TestPairingEndpoints:
     def test_pair_requires_control_auth(self, client: TestClient) -> None:
         assert client.get("/pair/devices").status_code == 401
         assert (
-            client.post("/pair/approve", headers={"Authorization": "Bearer read-nope"}, json={"device": "X"})
-            .status_code
+            client.post(
+                "/pair/approve", headers={"Authorization": "Bearer read-nope"}, json={"device": "X"}
+            ).status_code
             == 401
         )
         assert _poll(client).status_code != 401  # poll itself is unauthenticated by design
@@ -193,7 +201,12 @@ class TestPairingEndpoints:
 
     def test_poll_invalid_payloads(self, client: TestClient) -> None:
         assert client.post("/pair/poll", json={"device_id": DEVICE_ID}).status_code == 400
-        assert client.post("/pair/poll", content=b"not json", headers={"Content-Type": "application/json"}).status_code == 400
+        assert (
+            client.post(
+                "/pair/poll", content=b"not json", headers={"Content-Type": "application/json"}
+            ).status_code
+            == 400
+        )
         assert client.post("/pair/poll", json=[1, 2]).status_code == 400
 
     def test_approve_unknown_device_404(self, client: TestClient) -> None:
@@ -207,19 +220,28 @@ class TestPairingEndpoints:
     def test_denied_device_cannot_reclaim(self, client: TestClient) -> None:
         admin = {"Authorization": "Bearer control-token"}
         _poll(client)
-        assert client.post("/pair/deny", headers=admin, json={"device": display_code_for(DEVICE_ID)}).status_code == 200
+        assert (
+            client.post(
+                "/pair/deny", headers=admin, json={"device": display_code_for(DEVICE_ID)}
+            ).status_code
+            == 200
+        )
         # Record removed; a new poll registers a fresh pending request.
         assert _poll(client).json() == {"status": "pending"}
 
 
 class TestPairCli:
-    def test_missing_control_token_file_exits_1(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    def test_missing_control_token_file_exits_1(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
         from hermes_eink_dashboard.pair_cli import main as cli_main
 
         assert cli_main(["list", "--control-token-file", str(tmp_path / "absent")]) == 1
         assert "no control token" in capsys.readouterr().err
 
-    def test_approve_requires_device_argument(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    def test_approve_requires_device_argument(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
         from hermes_eink_dashboard.pair_cli import main as cli_main
 
         assert cli_main(["approve", "--control-token-file", str(tmp_path / "absent")]) == 2

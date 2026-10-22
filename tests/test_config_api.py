@@ -16,18 +16,19 @@ def api_setup(tmp_path):
             # Override the template path to use the test's tmp_path instead
             # of walking up from the package.
             self._template_override = tmp_path / "config.sh.example"
+
         def load_template(self):
             return (
-                "HOST_IP=\"HOST_IP\"\n"
-                "HOST_PORT=\"9120\"\n"
-                "DASHBOARD_TOKEN=\"CHANGE_ME\"\n"
-                "CONTROL_TOKEN=\"\"\n"
-                "REFRESH_INTERVAL=\"45\"\n"
-                "DOWNLOAD_TIMEOUT=\"12\"\n"
-                "FULL_REFRESH_EVERY=\"10\"\n"
-                "KEEP_AWAKE=\"1\"\n"
-                "STOP_FRAMEWORK=\"1\"\n"
-                "FBINK=\"\"\n"
+                'HOST_IP="HOST_IP"\n'
+                'HOST_PORT="9120"\n'
+                'DASHBOARD_TOKEN="CHANGE_ME"\n'
+                'CONTROL_TOKEN=""\n'
+                'REFRESH_INTERVAL="45"\n'
+                'DOWNLOAD_TIMEOUT="12"\n'
+                'FULL_REFRESH_EVERY="10"\n'
+                'KEEP_AWAKE="1"\n'
+                'STOP_FRAMEWORK="1"\n'
+                'FBINK=""\n'
             )
 
     settings = ApiSettings(token="read-token-123", control_token="control-token-456")
@@ -185,7 +186,11 @@ def test_config_requires_control_token(api_setup):
     client, _, _, _ = api_setup
 
     # Try without control token
-    resp = client.post("/config", headers={"Authorization": "Bearer read-token-123"}, json={"host_ip": "1.2.3.4", "dashboard_token": "t"})
+    resp = client.post(
+        "/config",
+        headers={"Authorization": "Bearer read-token-123"},
+        json={"host_ip": "1.2.3.4", "dashboard_token": "t"},
+    )
     assert resp.status_code == 401
 
     # Try with no token
@@ -209,7 +214,9 @@ def test_config_preview_requires_control_token(api_setup):
     client, _, _, _ = api_setup
 
     payload = {"host_ip": "1.2.3.4", "dashboard_token": "t"}
-    resp = client.post("/config/preview", headers={"Authorization": "Bearer read-token-123"}, json=payload)
+    resp = client.post(
+        "/config/preview", headers={"Authorization": "Bearer read-token-123"}, json=payload
+    )
     assert resp.status_code == 401
 
 
@@ -225,13 +232,21 @@ def test_config_without_control_token_configured_returns_503():
     app = create_app(settings=settings, aggregators=[])
     client = TestClient(app)
 
-    resp = client.post("/config", headers={"Authorization": "Bearer read-token-123"}, json={"host_ip": "1.2.3.4", "dashboard_token": "t"})
+    resp = client.post(
+        "/config",
+        headers={"Authorization": "Bearer read-token-123"},
+        json={"host_ip": "1.2.3.4", "dashboard_token": "t"},
+    )
     assert resp.status_code == 503
 
     resp = client.get("/config", headers={"Authorization": "Bearer read-token-123"})
     assert resp.status_code == 503
 
-    resp = client.post("/config/preview", headers={"Authorization": "Bearer read-token-123"}, json={"host_ip": "1.2.3.4", "dashboard_token": "t"})
+    resp = client.post(
+        "/config/preview",
+        headers={"Authorization": "Bearer read-token-123"},
+        json={"host_ip": "1.2.3.4", "dashboard_token": "t"},
+    )
     assert resp.status_code == 503
 
     resp = client.get("/config/example", headers={"Authorization": "Bearer read-token-123"})

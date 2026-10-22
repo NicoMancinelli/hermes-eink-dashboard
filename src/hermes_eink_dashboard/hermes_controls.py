@@ -16,6 +16,7 @@ Design constraints inherited from the security model:
 * All configuration lives on the trusted host; the Kindle only ever sees
   tile labels.
 """
+
 from __future__ import annotations
 
 import json
@@ -91,7 +92,12 @@ def load_controls_config(path: Path, logger: logging.Logger | None = None) -> He
     quick_prompts: dict[str, str] = {}
     if isinstance(prompts_raw, dict):
         for name, text in prompts_raw.items():
-            if isinstance(name, str) and NAME_RE.fullmatch(name) and isinstance(text, str) and text.strip():
+            if (
+                isinstance(name, str)
+                and NAME_RE.fullmatch(name)
+                and isinstance(text, str)
+                and text.strip()
+            ):
                 quick_prompts[name] = text.strip()
     models: list[str] = [
         alias for alias in models_raw if isinstance(alias, str) and NAME_RE.fullmatch(alias)
@@ -142,7 +148,10 @@ class ModelPreferenceStore:
 
     def set_model(self, alias: str) -> dict[str, Any]:
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        payload = {"quick_prompt_model": alias, "updated_at": datetime.now(timezone.utc).isoformat()}
+        payload = {
+            "quick_prompt_model": alias,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
         fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
@@ -233,7 +242,7 @@ class HermesPromptAction:
             for separator in (".", ":"):
                 prefix = f"{self.PREFIX}{separator}"
                 if candidate.startswith(prefix):
-                    name = candidate[len(prefix):]
+                    name = candidate[len(prefix) :]
                     break
             if name:
                 break
@@ -245,7 +254,11 @@ class HermesPromptAction:
 
         model = self.preferences.get_model() or None
         result = self.transport.send_prompt(text, model=model)
-        payload = {"status": "ok" if result.get("returncode") == 0 else "error", "prompt": name, **result}
+        payload = {
+            "status": "ok" if result.get("returncode") == 0 else "error",
+            "prompt": name,
+            **result,
+        }
         _write_result(self.config_dir, f"{self.PREFIX}.{name}.json", payload)
         return payload
 
@@ -278,7 +291,7 @@ class HermesModelAction:
             for separator in (".", ":"):
                 prefix = f"{self.PREFIX}{separator}"
                 if candidate.startswith(prefix):
-                    alias = candidate[len(prefix):]
+                    alias = candidate[len(prefix) :]
                     break
             if alias:
                 break
@@ -322,11 +335,19 @@ def control_tiles(config: HermesControlsConfig) -> list[dict[str, str]]:
     tiles: list[dict[str, str]] = []
     for name in config.prompt_names():
         label = f"Ask: {name.replace('_', ' ').replace('-', ' ').title()[:18]}"
-        tiles.append({"id": f"hermes_prompt:{name}", "label": label, "action": f"{HermesPromptAction.PREFIX}.{name}"})
+        tiles.append(
+            {
+                "id": f"hermes_prompt:{name}",
+                "label": label,
+                "action": f"{HermesPromptAction.PREFIX}.{name}",
+            }
+        )
     for alias in config.models:
-        tiles.append({
-            "id": f"hermes_model:{alias}",
-            "label": f"Model: {alias[:16]}",
-            "action": f"{HermesModelAction.PREFIX}.{alias}",
-        })
+        tiles.append(
+            {
+                "id": f"hermes_model:{alias}",
+                "label": f"Model: {alias[:16]}",
+                "action": f"{HermesModelAction.PREFIX}.{alias}",
+            }
+        )
     return tiles
