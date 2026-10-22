@@ -431,6 +431,9 @@ The host-side interactive layer is in place:
 - `GET /control/events` returns long-poll responses when an action is dispatched
   (`phase: "ack"`) and when it finished (`phase: "done"`, published after
   the panels were re-collected so a device render already shows the result).
+  The event stream is a single shared queue: with several paired devices one
+  device may consume another's event, in which case the affected device falls
+  back to its periodic refresh.
 - `render_layout_dashboard()` paints a tile grid with a 2px focus border around the focused tile.
 - `--layout-yaml` flag loads a custom layout from YAML.
 - `--focus-tile` / `focus_tile_id` query parameter on `/dashboard.png`

@@ -91,9 +91,14 @@ def fake_host():
     port = _free_port()
     bus = ControlBus()
     registry = ActionRegistry()
-    registry.register("workflow.refresh")
-    registry.register("alert.dismiss.test")
-    registry.register("context.set")
+    dispatched: list[dict] = []
+
+    def _record(tile_id: str = "", action: str = "", nonce: str = "", ts: float = 0.0) -> None:
+        dispatched.append({"tile_id": tile_id, "action": action})
+
+    registry.register("workflow.refresh", _record)
+    registry.register("alert.dismiss.test", _record)
+    registry.register("context.set", _record)
     cache = PanelCache()
     layout = build_default_layout(1072, 1448, panels=("hermes",))
     app = create_app(
@@ -106,7 +111,13 @@ def fake_host():
     )
     server, thread = _start_server(app, port)
     _wait_ready(port)
-    yield {"port": port, "registry": registry, "bus": bus, "cache": cache}
+    yield {
+        "port": port,
+        "registry": registry,
+        "bus": bus,
+        "cache": cache,
+        "dispatched": dispatched,
+    }
     server.should_exit = True
     thread.join(timeout=5.0)
 
@@ -155,19 +166,19 @@ def test_client_dispatches_control_on_activate(fake_host, tmp_path) -> None:
     client_thread = threading.Thread(target=client.run, daemon=True)
     client_thread.start()
 
-    # Wait for the bus event to arrive.
+    # Wait for the action to reach the host. The client consumes the bus
+    # events itself (to detect completion), so the handler recording is what
+    # tells us the dispatch happened.
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
-        with fake_host["bus"]._lock:
-            if fake_host["bus"]._events:
-                break
+        if fake_host["dispatched"]:
+            break
         time.sleep(0.05)
     client.stop()
     client_thread.join(timeout=2.0)
 
-    with fake_host["bus"]._lock:
-        assert fake_host["bus"]._events, "expected at least one bus event after activate"
-        payload = fake_host["bus"]._events[-1]
+    assert fake_host["dispatched"], "expected the host to run an action after activate"
+    payload = fake_host["dispatched"][-1]
     assert payload["action"] in {"workflow.refresh", "alert.dismiss.test", "context.set"}
     assert Path(image_path).exists()
     assert Path(image_path).stat().st_size > 0
