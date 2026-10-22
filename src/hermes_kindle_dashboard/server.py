@@ -13,6 +13,7 @@ import uvicorn
 from .actions import ActionRegistry
 from .actions_runtime import register_all_actions
 from .aggregators.hermes import HermesAggregator
+from .aggregators.prompt_response import PromptResponseAggregator
 from .api import ApiSettings, create_app
 from .beacon import BeaconConfig
 from .contract import build_default_layout
@@ -137,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     config = DashboardConfig.from_home(args.hermes_home, context_limit=args.context_limit)
     collector = HermesStateCollector(config)
+    actions_dir_str = os.getenv("HERMES_DASHBOARD_ACTIONS_DIR", "~/.config/hermes-kindle-dashboard")
+    actions_dir = Path(actions_dir_str).expanduser()
 
     layout_override = None
     if args.layout_yaml and args.layout_yaml.exists():
@@ -152,13 +155,23 @@ def main(argv: list[str] | None = None) -> int:
         # Trigger one aggregator cycle synchronously.
         from .contract import PanelCache as _PanelCache
         cache = _PanelCache()
-        cache.register("hermes")
-        asyncio.run(collect_once(HermesAggregator(collector=collector, interval_seconds=args.refresh_seconds), cache))
-        snapshot = cache.snapshot().get("panels", {}).get("hermes", {}).get("data", {})
-        from .state import DashboardSnapshot as _Snap
-        snap = _Snap.from_panel(snapshot, str(cache.snapshot()["generated_at"]))
-        layout = layout_override or build_default_layout(args.width, args.height)
-        image = render_layout_dashboard(layout, snap, RenderOptions(width=args.width, height=args.height, bit_depth=args.bit_depth))
+        providers = [
+            HermesAggregator(collector=collector, interval_seconds=args.refresh_seconds),
+            PromptResponseAggregator(config_dir=actions_dir),
+        ]
+        for provider in providers:
+            cache.register(provider.name)
+
+        async def _collect_all() -> None:
+            await asyncio.gather(*(collect_once(provider, cache) for provider in providers))
+
+        asyncio.run(_collect_all())
+        layout = layout_override or build_default_layout(
+            args.width, args.height, panels=("hermes", "prompt_response")
+        )
+        image = render_layout_dashboard(
+            layout, cache.snapshot(), RenderOptions(width=args.width, height=args.height, bit_depth=args.bit_depth)
+        )
         args.render_once.parent.mkdir(parents=True, exist_ok=True)
         from io import BytesIO as _BytesIO
         buf = _BytesIO()
@@ -179,8 +192,6 @@ def main(argv: list[str] | None = None) -> int:
     registry = ActionRegistry()
     pairing = None if args.no_pairing else PairingService(DeviceStore(args.devices_file))
 
-    actions_dir_str = os.getenv("HERMES_DASHBOARD_ACTIONS_DIR", "~/.config/hermes-kindle-dashboard")
-    actions_dir = Path(actions_dir_str).expanduser()
     if actions_dir.exists():
         register_all_actions(registry, actions_dir, logger=LOGGER)
 
@@ -191,7 +202,9 @@ def main(argv: list[str] | None = None) -> int:
     register_hermes_controls(registry, actions_dir, controls_config, CliTransport(controls_config), logger=LOGGER)
     effective_layout = layout_override
     if effective_layout is None:
-        effective_layout = build_default_layout(args.width, args.height, control_tiles=control_tiles(controls_config))
+        effective_layout = build_default_layout(
+            args.width, args.height, panels=("hermes", "prompt_response"), control_tiles=control_tiles(controls_config)
+        )
     app = create_app(
         ApiSettings(
             token=token,
@@ -201,7 +214,10 @@ def main(argv: list[str] | None = None) -> int:
             bit_depth=args.bit_depth,
             pairing=pairing,
         ),
-        [HermesAggregator(collector=collector, interval_seconds=args.refresh_seconds)],
+        [
+            HermesAggregator(collector=collector, interval_seconds=args.refresh_seconds),
+            PromptResponseAggregator(config_dir=actions_dir, interval_seconds=5.0),
+        ],
         bus=bus,
         registry=registry,
         layout=effective_layout,

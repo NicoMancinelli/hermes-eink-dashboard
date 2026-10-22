@@ -256,17 +256,35 @@ def build_default_layout(
         )
         slot += 1
 
+    show_prompt_panel = "prompt_response" in panels
+    hermes_row = 4
+    hermes_h = 1 if show_prompt_panel else 2
     if "hermes" in panels:
         tiles.append(
             Tile(
                 id="panel:hermes",
                 label="Hermes",
                 col=0,
-                row=4,
+                row=hermes_row,
                 w=4,
-                h=2,
+                h=hermes_h,
                 kind="panel",
                 panel="hermes",
+            )
+        )
+    if show_prompt_panel:
+        # Last Hermes quick-prompt answer, so tapping an Ask tile closes the
+        # loop on the device instead of leaving the reply host-side only.
+        tiles.append(
+            Tile(
+                id="panel:prompt_response",
+                label="Ask Hermes",
+                col=0,
+                row=hermes_row + hermes_h,
+                w=4,
+                h=rows - hermes_row - hermes_h,
+                kind="panel",
+                panel="prompt_response",
             )
         )
 

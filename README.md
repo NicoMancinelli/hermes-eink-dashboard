@@ -6,7 +6,7 @@ A standalone, read-only local dashboard gateway for [Hermes Agent](https://githu
 |---|---|
 | ![Paperwhite dashboard render](docs/screenshots/dashboard-paperwhite.png) | ![Classic Kindle dashboard render](docs/screenshots/dashboard-classic.png) |
 
-*Rendered from synthetic sample data via `--render-once` — tiles on top are live action buttons (refresh, dismissals, Hermes prompts/models when configured).*
+*Rendered from synthetic sample data via `scripts/render_screenshots.py` — tiles on top are live action buttons (refresh, dismissals, Hermes prompts/models when configured); the **Ask Hermes** strip shows the last quick-prompt answer.*
 
 ## One-liner install (Linux host)
 
@@ -448,7 +448,11 @@ the service:
 - **Quick prompts** — each `quick_prompts:` entry becomes an **Ask: &lt;Name&gt;**
   tile. Pressing it on the Kindle runs
   `hermes chat --query-file -` on the host with that named prompt piped over
-  stdin, so arbitrary text never crosses the network or a shell.
+  stdin, so arbitrary text never crosses the network or a shell. The latest
+  answer is then shown on the device itself in the **Ask Hermes** panel
+  (sanitized host-side: ANSI/control characters stripped, whitespace
+  collapsed, excerpt hard-capped), so the reply closes the loop on the
+  Kindle instead of staying host-side only.
 - **Model preference** — each `models:` entry becomes a **Model: &lt;alias&gt;**
   tile that selects which model subsequent quick prompts run with
   (`chat -m <alias>`). This is a dashboard-side preference: upstream's own
