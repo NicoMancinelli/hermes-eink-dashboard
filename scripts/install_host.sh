@@ -10,6 +10,13 @@ CONTEXT_LIMIT="262144"
 REFRESH_SECONDS="15"
 START_SERVICE="1"
 
+BIND_HOST_GIVEN=0
+PORT_GIVEN=0
+WIDTH_GIVEN=0
+HEIGHT_GIVEN=0
+CONTEXT_LIMIT_GIVEN=0
+REFRESH_SECONDS_GIVEN=0
+
 usage() {
   cat <<'EOF'
 Usage: scripts/install_host.sh [options]
@@ -20,29 +27,37 @@ Usage: scripts/install_host.sh [options]
   --context-limit N     Model context window (default: 262144)
   --refresh-seconds N   Hermes refresh interval (default: 15)
   --no-start            Install without enabling the service
+
+Options are inherited from an existing ~/.config/hermes-eink-dashboard/host.env
+when they are not passed, so re-running this script to upgrade an existing
+install never resets settings you already chose.
 EOF
 }
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --bind) BIND_HOST="$2"; shift 2 ;;
-    --port) PORT="$2"; shift 2 ;;
-    --width) WIDTH="$2"; shift 2 ;;
-    --height) HEIGHT="$2"; shift 2 ;;
-    --context-limit) CONTEXT_LIMIT="$2"; shift 2 ;;
-    --refresh-seconds) REFRESH_SECONDS="$2"; shift 2 ;;
+    --bind) BIND_HOST="$2"; BIND_HOST_GIVEN=1; shift 2 ;;
+    --port) PORT="$2"; PORT_GIVEN=1; shift 2 ;;
+    --width) WIDTH="$2"; WIDTH_GIVEN=1; shift 2 ;;
+    --height) HEIGHT="$2"; HEIGHT_GIVEN=1; shift 2 ;;
+    --context-limit) CONTEXT_LIMIT="$2"; CONTEXT_LIMIT_GIVEN=1; shift 2 ;;
+    --refresh-seconds) REFRESH_SECONDS="$2"; REFRESH_SECONDS_GIVEN=1; shift 2 ;;
     --no-start) START_SERVICE="0"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
-case "$BIND_HOST" in ""|*[!A-Za-z0-9._:-]*) echo "Bind address contains invalid characters" >&2; exit 2 ;; esac
-case "$PORT:$WIDTH:$HEIGHT:$CONTEXT_LIMIT:$REFRESH_SECONDS" in *[!0-9:]*) echo "Numeric options contain invalid characters" >&2; exit 2 ;; esac
-if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then echo "Port must be between 1 and 65535" >&2; exit 2; fi
-if [ "$WIDTH" -lt 320 ] || [ "$HEIGHT" -lt 480 ]; then echo "Display must be at least 320x480" >&2; exit 2; fi
-if [ "$CONTEXT_LIMIT" -lt 1 ]; then echo "Context limit must be positive" >&2; exit 2; fi
-if [ "$REFRESH_SECONDS" -lt 1 ]; then echo "Refresh interval must be positive" >&2; exit 2; fi
+validate_options() {
+  case "$BIND_HOST" in ""|*[!A-Za-z0-9._:-]*) echo "Bind address contains invalid characters" >&2; exit 2 ;; esac
+  case "$PORT:$WIDTH:$HEIGHT:$CONTEXT_LIMIT:$REFRESH_SECONDS" in *[!0-9:]*) echo "Numeric options contain invalid characters" >&2; exit 2 ;; esac
+  if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then echo "Port must be between 1 and 65535" >&2; exit 2; fi
+  if [ "$WIDTH" -lt 320 ] || [ "$HEIGHT" -lt 480 ]; then echo "Display must be at least 320x480" >&2; exit 2; fi
+  if [ "$CONTEXT_LIMIT" -lt 1 ]; then echo "Context limit must be positive" >&2; exit 2; fi
+  if [ "$REFRESH_SECONDS" -lt 1 ]; then echo "Refresh interval must be positive" >&2; exit 2; fi
+}
+
+validate_options
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-eink-dashboard"
 LEGACY_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-kindle-dashboard"
@@ -52,6 +67,26 @@ TOKEN_FILE="$CONFIG_DIR/token"
 CONTROL_TOKEN_FILE="$CONFIG_DIR/control_token"
 ENV_FILE="$CONFIG_DIR/host.env"
 VENV="$DATA_DIR/venv"
+
+# Re-running this script upgrades the virtualenv and package in place. Tokens
+# are only minted when absent, but host.env is rewritten wholesale below, so
+# without this an upgrade invoked with bare defaults would silently revert a
+# LAN bind address to loopback and strand an already-paired Kindle.
+# Options that were not passed explicitly are therefore inherited first.
+if [ -f "$ENV_FILE" ]; then
+  inherited() {
+    _previous=$(sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1)
+    if [ -n "$_previous" ]; then printf '%s' "$_previous"; else printf '%s' "$2"; fi
+  }
+  [ "$BIND_HOST_GIVEN" = 1 ] || BIND_HOST=$(inherited HERMES_DASHBOARD_HOST "$BIND_HOST")
+  [ "$PORT_GIVEN" = 1 ] || PORT=$(inherited HERMES_DASHBOARD_PORT "$PORT")
+  [ "$WIDTH_GIVEN" = 1 ] || WIDTH=$(inherited HERMES_DASHBOARD_WIDTH "$WIDTH")
+  [ "$HEIGHT_GIVEN" = 1 ] || HEIGHT=$(inherited HERMES_DASHBOARD_HEIGHT "$HEIGHT")
+  [ "$CONTEXT_LIMIT_GIVEN" = 1 ] || CONTEXT_LIMIT=$(inherited HERMES_DASHBOARD_CONTEXT_LIMIT "$CONTEXT_LIMIT")
+  [ "$REFRESH_SECONDS_GIVEN" = 1 ] || REFRESH_SECONDS=$(inherited HERMES_DASHBOARD_REFRESH_SECONDS "$REFRESH_SECONDS")
+  # Re-validate: host.env is user-editable and may hold junk.
+  validate_options
+fi
 
 mkdir -p "$CONFIG_DIR" "$DATA_DIR" "$UNIT_DIR"
 chmod 700 "$CONFIG_DIR"

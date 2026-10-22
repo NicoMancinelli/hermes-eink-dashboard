@@ -200,6 +200,26 @@ The installer creates:
 - private random control token: `~/.config/hermes-eink-dashboard/control_token`
 - user service: `~/.config/systemd/user/hermes-eink-dashboard.service`
 
+### Upgrading
+
+Re-running `install_host.sh` upgrades the virtualenv and package in place.
+Tokens are only minted when missing, so a paired Kindle stays paired, and
+any option you do not pass is inherited from the existing `host.env` rather
+than reverting to its default:
+
+```sh
+# Preserves --bind, --port, --context-limit and --refresh-seconds from host.env.
+./scripts/install_host.sh --no-start
+
+# Explicit flags still win; anything omitted stays as it was.
+./scripts/install_host.sh --port 9300 --no-start
+```
+
+Passing `--bind`, `--port`, `--width`, `--height`, `--context-limit` or
+`--refresh-seconds` explicitly overwrites just those values. Inherited
+values are re-validated, so a hand-edited `host.env` cannot inject an
+unsafe value.
+
 The control token enables `POST /control`, `GET /control/events`,
 `GET /config`, and `POST /config`. Without it, those endpoints return
 `503 Service Unavailable` (the read token does not silently grant write
