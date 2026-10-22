@@ -11,7 +11,7 @@ Design constraints inherited from the security model:
   from devices), so every parameterizable control is expressed as
   ``hermes.prompt.<name>`` / ``hermes.model.<alias>`` where ``<name>`` and
   ``<alias>`` MUST exist in the host-side allowlist loaded from
-  ``~/.config/hermes-kindle-dashboard/hermes_controls.yaml``. Unknown names
+  ``~/.config/hermes-eink-dashboard/hermes_controls.yaml``. Unknown names
   are rejected before any subprocess or network call happens.
 * All configuration lives on the trusted host; the Kindle only ever sees
   tile labels.
@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
-LOGGER = logging.getLogger("hermes-kindle-dashboard.hermes_controls")
+LOGGER = logging.getLogger("hermes-eink-dashboard.hermes_controls")
 
 MAX_CONFIG_BYTES = 1_048_576  # 1MB, same cap as actions.yaml
 NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,32}$")

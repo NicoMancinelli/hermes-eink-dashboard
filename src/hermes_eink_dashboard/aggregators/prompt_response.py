@@ -27,11 +27,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..contract import PanelData
+from ..paths import resolve_config_dir
 
-LOGGER = logging.getLogger("hermes-kindle-dashboard.aggregators.prompt_response")
+LOGGER = logging.getLogger("hermes-eink-dashboard.aggregators.prompt_response")
 
 DEFAULT_CONFIG_DIR = Path(
-    os.environ.get("HERMES_DASHBOARD_ACTIONS_DIR", "~/.config/hermes-kindle-dashboard")
+    os.environ.get("HERMES_DASHBOARD_ACTIONS_DIR") or resolve_config_dir()
 ).expanduser()
 
 RESULT_GLOB = "hermes.prompt.*.json"

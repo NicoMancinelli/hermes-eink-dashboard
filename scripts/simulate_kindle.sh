@@ -31,8 +31,8 @@ import sys
 sys.path.insert(0, "$ROOT")
 sys.path.insert(0, "$ROOT/tests")
 import uvicorn
-from hermes_kindle_dashboard.api import ApiSettings, create_app
-from hermes_kindle_dashboard.aggregators.hermes import snapshot_to_panel
+from hermes_eink_dashboard.api import ApiSettings, create_app
+from hermes_eink_dashboard.aggregators.hermes import snapshot_to_panel
 from test_render import sample_snapshot
 
 

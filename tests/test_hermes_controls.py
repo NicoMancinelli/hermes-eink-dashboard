@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from hermes_kindle_dashboard.actions import ActionRegistry
-from hermes_kindle_dashboard.contract import build_default_layout
-from hermes_kindle_dashboard.hermes_controls import (
+from hermes_eink_dashboard.actions import ActionRegistry
+from hermes_eink_dashboard.contract import build_default_layout
+from hermes_eink_dashboard.hermes_controls import (
     CliTransport,
     ControlRejectedError,
     HermesControlsConfig,

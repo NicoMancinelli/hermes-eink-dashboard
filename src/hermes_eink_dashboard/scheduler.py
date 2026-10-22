@@ -8,7 +8,7 @@ from typing import Any
 from .aggregators.base import Aggregator
 from .contract import PanelCache
 
-LOGGER = logging.getLogger("hermes-kindle-dashboard.scheduler")
+LOGGER = logging.getLogger("hermes-eink-dashboard.scheduler")
 _MAX_BACKOFF_SECONDS = 300.0
 
 

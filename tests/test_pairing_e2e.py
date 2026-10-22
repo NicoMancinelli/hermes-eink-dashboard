@@ -16,9 +16,9 @@ from pathlib import Path
 
 import uvicorn
 
-from hermes_kindle_dashboard.api import ApiSettings, create_app
-from hermes_kindle_dashboard.beacon import broadcast_once, build_beacon_payload
-from hermes_kindle_dashboard.pairing import DeviceStore, PairingService
+from hermes_eink_dashboard.api import ApiSettings, create_app
+from hermes_eink_dashboard.beacon import broadcast_once, build_beacon_payload
+from hermes_eink_dashboard.pairing import DeviceStore, PairingService
 from kindle.client.setup_wizard import run_wizard
 
 CONTROL_TOKEN = "control-token-e2e"

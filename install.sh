@@ -8,8 +8,12 @@
 # What it does:
 #   1. Installs the package into ~/.local/share/hermes-eink-dashboard/venv
 #   2. Generates a bearer token at ~/.config/hermes-eink-dashboard/token
+#      and a control token at ~/.config/hermes-eink-dashboard/control_token
 #   3. Installs a systemd --user service named hermes-eink-dashboard
 #   4. Starts the service on the requested bind/port
+#
+# A pre-rename installation (~/.config/hermes-kindle-dashboard) is migrated
+# automatically: tokens, paired devices and action state are carried over.
 #
 # Override defaults via flags or env vars (HERMES_EINK_BIND, HERMES_EINK_PORT,
 # HERMES_EINK_REFRESH, HERMES_EINK_WIDTH, HERMES_EINK_HEIGHT, HERMES_EINK_CONTEXT_LIMIT,
@@ -84,18 +88,48 @@ if ! command -v gh >/dev/null 2>&1; then
 fi
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-eink-dashboard"
+LEGACY_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-kindle-dashboard"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/hermes-eink-dashboard"
 SERVICE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 TOKEN_FILE="$CONFIG_DIR/token"
+CONTROL_TOKEN_FILE="$CONFIG_DIR/control_token"
 ENV_FILE="$CONFIG_DIR/host.env"
 VENV="$DATA_DIR/venv"
 TMPDIR="$(mktemp -d)" && trap 'rm -rf "$TMPDIR"' EXIT
 
 mkdir -p "$CONFIG_DIR" "$DATA_DIR" "$SERVICE_DIR"
 
+# Carry over a pre-rename installation (tokens, paired devices) so an
+# upgrade never invalidates an already paired Kindle.
+if [ -d "$LEGACY_CONFIG_DIR" ]; then
+  echo "Migrating $LEGACY_CONFIG_DIR -> $CONFIG_DIR"
+  for name in token control_token devices.json actions.yaml dismissed_alerts.json \
+    context.json config.yaml hermes_controls.yaml; do
+    if [ -f "$LEGACY_CONFIG_DIR/$name" ] && [ ! -e "$CONFIG_DIR/$name" ]; then
+      cp -p "$LEGACY_CONFIG_DIR/$name" "$CONFIG_DIR/$name"
+    fi
+  done
+  for name in actions rendered; do
+    if [ -d "$LEGACY_CONFIG_DIR/$name" ] && [ ! -d "$CONFIG_DIR/$name" ]; then
+      cp -R "$LEGACY_CONFIG_DIR/$name" "$CONFIG_DIR/$name"
+    fi
+  done
+  BACKUP_DIR="${LEGACY_CONFIG_DIR}.migrated"
+  if [ -e "$BACKUP_DIR" ]; then
+    BACKUP_DIR="${LEGACY_CONFIG_DIR}.migrated.$(date +%s)"
+  fi
+  mv "$LEGACY_CONFIG_DIR" "$BACKUP_DIR"
+  echo "Previous configuration kept at $BACKUP_DIR"
+fi
+
 if [ ! -f "$TOKEN_FILE" ]; then
   python3 -c "import secrets; print(secrets.token_urlsafe(32))" > "$TOKEN_FILE"
   chmod 600 "$TOKEN_FILE"
+fi
+
+if [ ! -f "$CONTROL_TOKEN_FILE" ]; then
+  python3 -c "import secrets; print(secrets.token_hex(32))" > "$CONTROL_TOKEN_FILE"
+  chmod 600 "$CONTROL_TOKEN_FILE"
 fi
 
 if [ ! -d "$VENV" ]; then
@@ -116,7 +150,7 @@ if [ "$INSTALL_SERVICE" != "1" ]; then
 Installed package, but skipped systemd service (--no-service).
 
 To start manually:
-  $VENV/bin/hermes-kindle-dashboard \\
+  $VENV/bin/hermes-eink-dashboard \\
     --bind $BIND_HOST --port $PORT --width $WIDTH --height $HEIGHT \\
     --context-limit $CONTEXT_LIMIT --refresh-seconds $REFRESH_SECONDS \\
     --hermes-home "$HERMES_HOME"
@@ -134,7 +168,9 @@ HERMES_DASHBOARD_WIDTH=$WIDTH
 HERMES_DASHBOARD_HEIGHT=$HEIGHT
 HERMES_DASHBOARD_CONTEXT_LIMIT=$CONTEXT_LIMIT
 HERMES_DASHBOARD_REFRESH_SECONDS=$REFRESH_SECONDS
-HERMES_DASHBOARD_HERMES_HOME=$HERMES_HOME
+HERMES_HOME=$HERMES_HOME
+HERMES_DASHBOARD_TOKEN_FILE=$TOKEN_FILE
+HERMES_DASHBOARD_CONTROL_TOKEN_FILE=$CONTROL_TOKEN_FILE
 EOF
 chmod 600 "$ENV_FILE"
 
@@ -147,7 +183,7 @@ After=network-online.target
 Type=simple
 EnvironmentFile=%h/.config/hermes-eink-dashboard/host.env
 Environment=PYTHONPATH=
-ExecStart=%h/.local/share/hermes-eink-dashboard/venv/bin/hermes-kindle-dashboard
+ExecStart=%h/.local/share/hermes-eink-dashboard/venv/bin/hermes-eink-dashboard
 Restart=on-failure
 RestartSec=5
 
@@ -156,6 +192,9 @@ WantedBy=default.target
 EOF
 
 systemctl --user daemon-reload
+# Retire the pre-rename unit, if one is still installed.
+systemctl --user disable --now hermes-kindle-dashboard.service >/dev/null 2>&1 || true
+rm -f "$SERVICE_DIR/hermes-kindle-dashboard.service"
 systemctl --user enable --now hermes-eink-dashboard.service
 
 # Wait briefly for the health endpoint.

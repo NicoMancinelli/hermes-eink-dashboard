@@ -22,17 +22,17 @@ def test_host_installer_rejects_environment_file_injection(tmp_path: Path) -> No
         text=True,
     )
     assert result.returncode == 2
-    assert not (tmp_path / ".config/hermes-kindle-dashboard").exists()
+    assert not (tmp_path / ".config/hermes-eink-dashboard").exists()
 
 
 def test_systemd_unit_uses_private_config_and_restart_policy() -> None:
-    unit = (ROOT / "systemd/hermes-kindle-dashboard.service").read_text()
+    unit = (ROOT / "systemd/hermes-eink-dashboard.service").read_text()
     parser = configparser.ConfigParser(interpolation=None)
     parser.read_string(unit)
     service = parser["Service"]
-    assert service["EnvironmentFile"] == "%h/.config/hermes-kindle-dashboard/host.env"
+    assert service["EnvironmentFile"] == "%h/.config/hermes-eink-dashboard/host.env"
     assert service["Environment"] == "PYTHONPATH="
-    assert "%h/.local/share/hermes-kindle-dashboard/venv/bin/hermes-kindle-dashboard" in service["ExecStart"]
+    assert "%h/.local/share/hermes-eink-dashboard/venv/bin/hermes-eink-dashboard" in service["ExecStart"]
     assert service["Restart"] == "on-failure"
     assert service["NoNewPrivileges"] == "true"
 
@@ -157,7 +157,7 @@ def test_host_installer_generates_control_token(tmp_path: Path) -> None:
         text=True,
         check=True,
     )
-    config_dir = tmp_path / ".config/hermes-kindle-dashboard"
+    config_dir = tmp_path / ".config/hermes-eink-dashboard"
     assert (config_dir / "token").exists()
     assert (config_dir / "control_token").exists()
     # The control token must be hex (we use secrets.token_hex(32) → 64 chars).
@@ -167,6 +167,40 @@ def test_host_installer_generates_control_token(tmp_path: Path) -> None:
     env_text = (config_dir / "host.env").read_text()
     assert "HERMES_DASHBOARD_CONTROL_TOKEN_FILE" in env_text
     assert str(config_dir / "control_token") in env_text
+
+
+def test_host_installer_migrates_pre_consolidation_config(tmp_path: Path) -> None:
+    """An install created before the rename keeps its tokens and devices."""
+    legacy_dir = tmp_path / ".config/hermes-kindle-dashboard"
+    legacy_dir.mkdir(parents=True)
+    (legacy_dir / "token").write_text("legacy-read-token\n")
+    (legacy_dir / "control_token").write_text("legacy-control-token\n")
+    (legacy_dir / "devices.json").write_text('{"devices": []}')
+    (legacy_dir / "actions").mkdir()
+    (legacy_dir / "actions" / "hermes.prompt.greet.json").write_text('{"answer": "hi"}')
+
+    subprocess.run(
+        [
+            "sh",
+            str(ROOT / "scripts/install_host.sh"),
+            "--bind", "127.0.0.1",
+            "--no-start",
+        ],
+        env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    config_dir = tmp_path / ".config/hermes-eink-dashboard"
+    # Tokens and device state survive the migration, so paired Kindles stay paired.
+    assert (config_dir / "token").read_text().strip() == "legacy-read-token"
+    assert (config_dir / "control_token").read_text().strip() == "legacy-control-token"
+    assert (config_dir / "devices.json").exists()
+    assert (config_dir / "actions" / "hermes.prompt.greet.json").exists()
+    # The old directory is kept as a backup, never deleted.
+    assert not legacy_dir.exists()
+    assert (tmp_path / ".config/hermes-kindle-dashboard.migrated" / "token").exists()
 
 
 

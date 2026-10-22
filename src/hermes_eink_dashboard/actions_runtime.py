@@ -6,12 +6,12 @@ to a `POST /control` event.
 
 Handlers:
 - WorkflowAction: runs a configured shell command as argv list. Reads from
-  a config file at ~/.config/hermes-kindle-dashboard/actions.yaml.
+  a config file at ~/.config/hermes-eink-dashboard/actions.yaml.
   Each line is `name: [json_argv]`. Lines starting with # are comments.
 - AlertDismissAction: writes {alert_id: ISO timestamp} to
-  ~/.config/hermes-kindle-dashboard/dismissed_alerts.json.
+  ~/.config/hermes-eink-dashboard/dismissed_alerts.json.
 - ContextSetAction: writes {'context': str, 'updated_at': ISO} to
-  ~/.config/hermes-kindle-dashboard/context.json.
+  ~/.config/hermes-eink-dashboard/context.json.
 - RefreshAction: forces the panel cache to refresh (no-op when no cache).
 
 register_all_actions() wires all four handlers to an ActionRegistry.
@@ -28,7 +28,7 @@ from typing import Any
 from .actions import ActionRegistry
 from .contract import PanelCache
 
-LOGGER = logging.getLogger("hermes-kindle-dashboard.actions_runtime")
+LOGGER = logging.getLogger("hermes-eink-dashboard.actions_runtime")
 
 
 MAX_ACTION_CONFIG_SIZE_BYTES = 1_048_576  # 1MB

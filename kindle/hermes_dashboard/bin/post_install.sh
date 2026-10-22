@@ -24,7 +24,7 @@ usage() {
     cat >&2 <<'EOF'
 Usage: post_install.sh [--host HOST] [--port PORT] [--read-token TOKEN] [--control-token TOKEN]
 
-  --host            LAN/tailnet address of the host running hermes-kindle-dashboard
+  --host            LAN/tailnet address of the host running hermes-eink-dashboard
   --port            HTTP port on the host (default 9120)
   --read-token      Bearer token for /dashboard.png and /dashboard.json
   --control-token   Bearer token for /control and /control/events (optional)
