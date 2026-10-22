@@ -247,8 +247,35 @@ def create_app(
         nonce = str(body.get("nonce", ""))
         ts = body.get("ts", 0)
 
+        loop = asyncio.get_running_loop()
+
+        async def _publish_completion(result: dict[str, Any]) -> None:
+            # Refresh the panels first so the state a device renders next
+            # already contains the effect of the action (for example the
+            # answer to a quick prompt).
+            for provider in providers:
+                await collect_once(provider, panel_cache)
+            control_bus.publish({"phase": "done", **result})
+
+        def _on_complete(result: dict[str, Any]) -> None:
+            """Called from the handler thread once the action finished."""
+
+            def _schedule() -> None:
+                asyncio.create_task(_publish_completion(result))
+
+            try:
+                loop.call_soon_threadsafe(_schedule)
+            except RuntimeError:  # loop already closed (shutdown)
+                return
+
         try:
-            res = action_registry.dispatch(action=action, tile_id=tile_id, nonce=nonce, ts=ts)
+            res = action_registry.dispatch(
+                action=action,
+                tile_id=tile_id,
+                nonce=nonce,
+                ts=ts,
+                on_complete=_on_complete,
+            )
         except UnknownActionError:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
         except RateLimitExceededError:
@@ -260,7 +287,7 @@ def create_app(
         except (ActionError, ValueError, TypeError):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
 
-        control_bus.publish(res)
+        control_bus.publish({"phase": "ack", **res})
         return JSONResponse({"status": "ok", "action": action, "tile_id": tile_id})
 
     @app.get("/control/events")

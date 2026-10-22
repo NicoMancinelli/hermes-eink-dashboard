@@ -74,6 +74,7 @@ class ActionRegistry:
         nonce: str = "",
         ts: float | int = 0,
         now: float | None = None,
+        on_complete: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         current_time = float(now) if now is not None else time.time()
         ts_float = float(ts)
@@ -130,6 +131,12 @@ class ActionRegistry:
             with self._lock:
                 self._pending.add(future)
             future.add_done_callback(self._drop_pending)
+            if on_complete is not None:
+                future.add_done_callback(
+                    lambda fut, _action=action, _tile_id=tile_id, _callback=on_complete: self._notify_complete(
+                        _callback, fut, _action, _tile_id
+                    )
+                )
 
         LOGGER.info("action=%s result=ok tile_id=%s nonce=%s", action, tile_id, nonce)
         return {
@@ -138,6 +145,32 @@ class ActionRegistry:
             "nonce": nonce,
             "ts": ts_float,
         }
+
+    @staticmethod
+    def _notify_complete(
+        callback: Callable[[dict[str, Any]], None],
+        future: Future,
+        action: str,
+        tile_id: str,
+    ) -> None:
+        """Tell the caller that a dispatched handler finished.
+
+        The payload carries no handler output: devices only learn *that* the
+        action finished and whether it succeeded, never what the handler
+        produced (that stays host-side and is surfaced through sanitized
+        panels).
+        """
+        payload: dict[str, Any] = {"tile_id": tile_id, "action": action}
+        try:
+            future.result()
+            payload["status"] = "ok"
+        except Exception:
+            payload["status"] = "error"
+            payload["error_code"] = "handler_failed"
+        try:
+            callback(payload)
+        except Exception:
+            LOGGER.exception("action completion callback failed")
 
     @staticmethod
     def _log_handler_result(future: Future) -> None:

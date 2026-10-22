@@ -502,3 +502,121 @@ def test_focus_tile_no_match_keeps_focus() -> None:
     # Far below any tile
     client._focus_tile("__raw__:500:1400")
     assert client._focus_tile_id == "a"
+
+
+class _StubBus:
+    """BusClient stand-in that records the call order."""
+
+    events_supported = True
+
+    def __init__(self, layout: Layout, action: str) -> None:
+        self._layout = layout
+        self._action = action
+        self.calls: list[str] = []
+        self._events_sent = 0
+
+    def get_layout(self) -> Layout:
+        self.calls.append("layout")
+        return self._layout
+
+    def get_png(self, focus_tile_id: str | None = None) -> bytes:
+        self.calls.append("png")
+        return b"\x89PNG-not-a-real-image"
+
+    def post_control(self, tile_id: str, action: str) -> dict:
+        self.calls.append("dispatch")
+        return {"status": "ok", "action": action}
+
+    def get_control_event(self, timeout: float = 1.0) -> dict | None:
+        self.calls.append("event")
+        self._events_sent += 1
+        if self._events_sent == 1:
+            return {"phase": "ack", "action": self._action}
+        if self._events_sent == 2:
+            return {"phase": "done", "action": self._action, "status": "ok"}
+        return None
+
+
+def _action_layout() -> Layout:
+    return Layout.from_dict(
+        {
+            "schema_version": 2,
+            "layout": {"columns": 1, "rows": 1, "tile_size": [240, 160], "grid_size": (240, 160)},
+            "tiles": [
+                {
+                    "id": "ask",
+                    "label": "Ask",
+                    "col": 0,
+                    "row": 0,
+                    "w": 1,
+                    "h": 1,
+                    "kind": "action",
+                    "action": "test.action",
+                }
+            ],
+            "focus": {"tile_id": "ask", "x": 0, "y": 0},
+        }
+    )
+
+
+def test_client_repaints_when_the_dispatched_action_completes(tmp_path) -> None:
+    """The device refreshes as soon as the host reports the action finished."""
+    bus = _StubBus(_action_layout(), "test.action")
+    client = DashboardClient(
+        bus=bus,
+        source=MockSource([InputEvent(kind="activate")]),
+        image_path=_tmp_image(tmp_path),
+        # Long refresh interval: only the completion event may trigger a
+        # repaint after the dispatch.
+        refresh_seconds=60.0,
+        event_poll_seconds=0.05,
+    )
+    thread = threading.Thread(target=client.run, daemon=True)
+    thread.start()
+
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if bus.calls.count("event") >= 2 and bus.calls.count("png") >= 3:
+            break
+        time.sleep(0.05)
+    client.stop()
+    thread.join(timeout=2.0)
+
+    assert "dispatch" in bus.calls
+    done_index = bus.calls.index("event", bus.calls.index("dispatch"))
+    # The acknowledgement is consumed first, then the completion event.
+    assert bus.calls[done_index + 1] == "event"
+    assert "png" in bus.calls[done_index + 2:]
+
+
+def test_client_stops_waiting_when_the_host_has_no_event_stream(tmp_path) -> None:
+    """An older host without phase markers must not make the client poll forever."""
+
+    class _LegacyBus(_StubBus):
+        def get_control_event(self, timeout: float = 1.0) -> dict | None:
+            self.calls.append("event")
+            return {"tile_id": "ask", "action": "test.action"}
+
+    bus = _LegacyBus(_action_layout(), "test.action")
+    client = DashboardClient(
+        bus=bus,
+        source=MockSource([InputEvent(kind="activate")]),
+        image_path=_tmp_image(tmp_path),
+        refresh_seconds=60.0,
+        event_poll_seconds=0.05,
+    )
+    thread = threading.Thread(target=client.run, daemon=True)
+    thread.start()
+
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if bus.calls.count("event") >= 1:
+            break
+        time.sleep(0.05)
+    time.sleep(0.3)
+    client.stop()
+    thread.join(timeout=2.0)
+
+    # Only one poll happened: the client gave up on the legacy stream.
+    assert bus.calls.count("event") == 1
+    assert client._pending_action is None
