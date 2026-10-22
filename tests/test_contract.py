@@ -160,4 +160,3 @@ def test_dashboard_json_returns_schema_v2_payload() -> None:
     assert len(res["tiles"]) == 1
     assert res["tiles"][0]["id"] == "wf:briefing"
     assert res["focus"] == {"tile_id": "wf:briefing", "x": 0, "y": 0}
-

@@ -14,6 +14,7 @@ end-to-end behavior:
 Hardware-specific input (FiveWaySource) is only tested for protocol
 correctness, not for live device behavior.
 """
+
 from __future__ import annotations
 
 import socket
@@ -129,10 +130,46 @@ def test_layout_neighbor_picks_closest_adjacent_tile() -> None:
         "schema_version": 2,
         "layout": {"columns": 4, "rows": 6, "tile_size": [240, 160], "grid_size": [1072, 1448]},
         "tiles": [
-            {"id": "a", "label": "A", "col": 0, "row": 0, "w": 2, "h": 1, "kind": "action", "action": None},
-            {"id": "b", "label": "B", "col": 2, "row": 0, "w": 2, "h": 1, "kind": "action", "action": None},
-            {"id": "c", "label": "C", "col": 0, "row": 1, "w": 2, "h": 1, "kind": "action", "action": None},
-            {"id": "d", "label": "D", "col": 2, "row": 1, "w": 2, "h": 1, "kind": "action", "action": None},
+            {
+                "id": "a",
+                "label": "A",
+                "col": 0,
+                "row": 0,
+                "w": 2,
+                "h": 1,
+                "kind": "action",
+                "action": None,
+            },
+            {
+                "id": "b",
+                "label": "B",
+                "col": 2,
+                "row": 0,
+                "w": 2,
+                "h": 1,
+                "kind": "action",
+                "action": None,
+            },
+            {
+                "id": "c",
+                "label": "C",
+                "col": 0,
+                "row": 1,
+                "w": 2,
+                "h": 1,
+                "kind": "action",
+                "action": None,
+            },
+            {
+                "id": "d",
+                "label": "D",
+                "col": 2,
+                "row": 1,
+                "w": 2,
+                "h": 1,
+                "kind": "action",
+                "action": None,
+            },
         ],
         "focus": {"tile_id": "a", "x": 0, "y": 0},
     }
@@ -302,8 +339,26 @@ def test_focus_changes_via_neighbor(fake_host, tmp_path) -> None:
             "schema_version": 2,
             "layout": {"columns": 4, "rows": 6, "tile_size": [240, 160], "grid_size": [1072, 1448]},
             "tiles": [
-                {"id": "a", "label": "A", "col": 0, "row": 0, "w": 2, "h": 1, "kind": "action", "action": None},
-                {"id": "b", "label": "B", "col": 2, "row": 0, "w": 2, "h": 1, "kind": "action", "action": None},
+                {
+                    "id": "a",
+                    "label": "A",
+                    "col": 0,
+                    "row": 0,
+                    "w": 2,
+                    "h": 1,
+                    "kind": "action",
+                    "action": None,
+                },
+                {
+                    "id": "b",
+                    "label": "B",
+                    "col": 2,
+                    "row": 0,
+                    "w": 2,
+                    "h": 1,
+                    "kind": "action",
+                    "action": None,
+                },
             ],
             "focus": {"tile_id": "a", "x": 0, "y": 0},
         }
@@ -322,10 +377,10 @@ def test_focus_changes_via_neighbor(fake_host, tmp_path) -> None:
     assert client._focus_tile_id == "b"
 
 
-
 # ===========================================================================
 # Touch support tests
 # ===========================================================================
+
 
 def test_layout_tile_at_returns_correct_tile() -> None:
     """Layout.tile_at maps (x, y) to the tile under that coordinate."""
@@ -334,9 +389,36 @@ def test_layout_tile_at_returns_correct_tile() -> None:
             "schema_version": 2,
             "layout": {"columns": 4, "rows": 6, "tile_size": [240, 160], "grid_size": [1072, 1448]},
             "tiles": [
-                {"id": "top-left", "label": "TL", "col": 0, "row": 0, "w": 2, "h": 1, "kind": "action", "action": None},
-                {"id": "top-right", "label": "TR", "col": 2, "row": 0, "w": 2, "h": 1, "kind": "action", "action": None},
-                {"id": "bottom", "label": "B", "col": 0, "row": 4, "w": 4, "h": 2, "kind": "action", "action": None},
+                {
+                    "id": "top-left",
+                    "label": "TL",
+                    "col": 0,
+                    "row": 0,
+                    "w": 2,
+                    "h": 1,
+                    "kind": "action",
+                    "action": None,
+                },
+                {
+                    "id": "top-right",
+                    "label": "TR",
+                    "col": 2,
+                    "row": 0,
+                    "w": 2,
+                    "h": 1,
+                    "kind": "action",
+                    "action": None,
+                },
+                {
+                    "id": "bottom",
+                    "label": "B",
+                    "col": 0,
+                    "row": 4,
+                    "w": 4,
+                    "h": 2,
+                    "kind": "action",
+                    "action": None,
+                },
             ],
             "focus": {"tile_id": "top-left", "x": 0, "y": 0},
         }
@@ -359,8 +441,26 @@ def test_layout_tile_at_first_match_wins() -> None:
             "schema_version": 2,
             "layout": {"columns": 4, "rows": 6, "tile_size": [240, 160], "grid_size": [1072, 1448]},
             "tiles": [
-                {"id": "first", "label": "First", "col": 0, "row": 0, "w": 4, "h": 4, "kind": "action", "action": None},
-                {"id": "second", "label": "Second", "col": 1, "row": 1, "w": 2, "h": 2, "kind": "action", "action": None},
+                {
+                    "id": "first",
+                    "label": "First",
+                    "col": 0,
+                    "row": 0,
+                    "w": 4,
+                    "h": 4,
+                    "kind": "action",
+                    "action": None,
+                },
+                {
+                    "id": "second",
+                    "label": "Second",
+                    "col": 1,
+                    "row": 1,
+                    "w": 2,
+                    "h": 2,
+                    "kind": "action",
+                    "action": None,
+                },
             ],
             "focus": {"tile_id": "first", "x": 0, "y": 0},
         }
@@ -378,10 +478,11 @@ def test_touch_source_emits_raw_coordinate_event(tmp_path) -> None:
     # Synthesize a press at (500, 300). Layout matches: x=500, y=300.
     # Single-touch protocol A sends ABS_X then ABS_Y then BTN_TOUCH=1.
     import struct as _struct
+
     payload = b""
     payload += _struct.pack("llHHi", 1000, 0, 0x03, 0x00, 500)  # EV_ABS, ABS_X, 500
     payload += _struct.pack("llHHi", 1000, 0, 0x03, 0x01, 300)  # EV_ABS, ABS_Y, 300
-    payload += _struct.pack("llHHi", 1000, 0, 0x01, 0x14A, 1)   # EV_KEY, BTN_TOUCH, press
+    payload += _struct.pack("llHHi", 1000, 0, 0x01, 0x14A, 1)  # EV_KEY, BTN_TOUCH, press
     events_path.write_bytes(payload)
 
     src = TouchSource(device=str(events_path))
@@ -398,6 +499,7 @@ def test_touch_source_scales_to_layout(tmp_path) -> None:
     """TouchSource rescales raw device coordinates to layout coordinates."""
     events_path = tmp_path / "events.bin"
     import struct as _struct
+
     payload = b""
     payload += _struct.pack("llHHi", 1000, 0, 0x03, 0x00, 100)  # x=100 on a 200x300 device
     payload += _struct.pack("llHHi", 1000, 0, 0x03, 0x01, 100)  # y=100
@@ -460,14 +562,34 @@ def test_focus_tile_resolves_touch_marker_to_layout_tile() -> None:
             "schema_version": 2,
             "layout": {"columns": 4, "rows": 6, "tile_size": [240, 160], "grid_size": [1072, 1448]},
             "tiles": [
-                {"id": "a", "label": "A", "col": 0, "row": 0, "w": 1, "h": 1, "kind": "action", "action": "x"},
-                {"id": "b", "label": "B", "col": 1, "row": 0, "w": 1, "h": 1, "kind": "action", "action": "y"},
+                {
+                    "id": "a",
+                    "label": "A",
+                    "col": 0,
+                    "row": 0,
+                    "w": 1,
+                    "h": 1,
+                    "kind": "action",
+                    "action": "x",
+                },
+                {
+                    "id": "b",
+                    "label": "B",
+                    "col": 1,
+                    "row": 0,
+                    "w": 1,
+                    "h": 1,
+                    "kind": "action",
+                    "action": "y",
+                },
             ],
             "focus": {"tile_id": "a", "x": 0, "y": 0},
         }
     )
     bus = BusClient("http://127.0.0.1:9999", "r", "c")
-    client = DashboardClient(bus=bus, source=MockSource([]), image_path="/tmp/x.png", refresh_seconds=1.0)
+    client = DashboardClient(
+        bus=bus, source=MockSource([]), image_path="/tmp/x.png", refresh_seconds=1.0
+    )
     client._layout = layout
     client._focus_tile_id = "a"
     # Touch at (300, 50) lands inside tile 'b' (col=1, x in 240..480)
@@ -481,12 +603,25 @@ def test_focus_tile_ignores_invalid_marker() -> None:
         {
             "schema_version": 2,
             "layout": {"columns": 4, "rows": 6, "tile_size": [240, 160], "grid_size": [1072, 1448]},
-            "tiles": [{"id": "a", "label": "A", "col": 0, "row": 0, "w": 1, "h": 1, "kind": "action", "action": None}],
+            "tiles": [
+                {
+                    "id": "a",
+                    "label": "A",
+                    "col": 0,
+                    "row": 0,
+                    "w": 1,
+                    "h": 1,
+                    "kind": "action",
+                    "action": None,
+                }
+            ],
             "focus": {"tile_id": "a", "x": 0, "y": 0},
         }
     )
     bus = BusClient("http://127.0.0.1:9999", "r", "c")
-    client = DashboardClient(bus=bus, source=MockSource([]), image_path="/tmp/x.png", refresh_seconds=1.0)
+    client = DashboardClient(
+        bus=bus, source=MockSource([]), image_path="/tmp/x.png", refresh_seconds=1.0
+    )
     client._layout = layout
     client._focus_tile_id = "a"
     client._focus_tile("not-a-marker")
@@ -500,12 +635,25 @@ def test_focus_tile_no_match_keeps_focus() -> None:
         {
             "schema_version": 2,
             "layout": {"columns": 4, "rows": 6, "tile_size": [240, 160], "grid_size": [1072, 1448]},
-            "tiles": [{"id": "a", "label": "A", "col": 0, "row": 0, "w": 1, "h": 1, "kind": "action", "action": None}],
+            "tiles": [
+                {
+                    "id": "a",
+                    "label": "A",
+                    "col": 0,
+                    "row": 0,
+                    "w": 1,
+                    "h": 1,
+                    "kind": "action",
+                    "action": None,
+                }
+            ],
             "focus": {"tile_id": "a", "x": 0, "y": 0},
         }
     )
     bus = BusClient("http://127.0.0.1:9999", "r", "c")
-    client = DashboardClient(bus=bus, source=MockSource([]), image_path="/tmp/x.png", refresh_seconds=1.0)
+    client = DashboardClient(
+        bus=bus, source=MockSource([]), image_path="/tmp/x.png", refresh_seconds=1.0
+    )
     client._layout = layout
     client._focus_tile_id = "a"
     # Far below any tile
@@ -595,7 +743,7 @@ def test_client_repaints_when_the_dispatched_action_completes(tmp_path) -> None:
     done_index = bus.calls.index("event", bus.calls.index("dispatch"))
     # The acknowledgement is consumed first, then the completion event.
     assert bus.calls[done_index + 1] == "event"
-    assert "png" in bus.calls[done_index + 2:]
+    assert "png" in bus.calls[done_index + 2 :]
 
 
 def test_client_stops_waiting_when_the_host_has_no_event_stream(tmp_path) -> None:

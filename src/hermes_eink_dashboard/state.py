@@ -134,7 +134,9 @@ class HermesStateCollector:
     @staticmethod
     def _clean_text(value: str, limit: int = 100) -> str:
         text = re.sub(r"\s+", " ", value or "").strip()
-        text = re.sub(r"(?i)(token|password|secret|api[_-]?key)\s*[:=]\s*\S+", r"\1=<redacted>", text)
+        text = re.sub(
+            r"(?i)(token|password|secret|api[_-]?key)\s*[:=]\s*\S+", r"\1=<redacted>", text
+        )
         return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
     def _latest_session(self) -> SessionState:
@@ -236,7 +238,13 @@ class HermesStateCollector:
         try:
             with self._connect(self.config.kanban_db) as conn:
                 columns = {row[1] for row in conn.execute("PRAGMA table_info(tasks)")}
-                order = "updated_at DESC" if "updated_at" in columns else "created_at DESC" if "created_at" in columns else "rowid DESC"
+                order = (
+                    "updated_at DESC"
+                    if "updated_at" in columns
+                    else "created_at DESC"
+                    if "created_at" in columns
+                    else "rowid DESC"
+                )
                 rows = conn.execute(
                     f"SELECT title, status FROM tasks WHERE status NOT IN ('completed','cancelled','archived') ORDER BY {order} LIMIT ?",
                     (self.config.max_tasks,),
@@ -247,7 +255,11 @@ class HermesStateCollector:
         except (sqlite3.Error, OSError):
             return [], 0
         tasks = [
-            TaskState(self._clean_text(str(row["title"] or ""), 90), str(row["status"] or "pending"), "kanban")
+            TaskState(
+                self._clean_text(str(row["title"] or ""), 90),
+                str(row["status"] or "pending"),
+                "kanban",
+            )
             for row in rows
             if row["title"]
         ]

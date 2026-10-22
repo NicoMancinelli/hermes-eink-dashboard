@@ -14,6 +14,7 @@ zero-typing onboarding:
 
 Progress is shown via ``eips`` so no extra dependencies are required.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -60,8 +61,8 @@ def show(line1: str, line2: str = "", line3: str = "") -> None:
 
 def generate_device_credentials() -> tuple[str, str, str]:
     """Return (device_id, device_secret, display_code)."""
-    device_id = secrets.token_hex(8)          # 16 hex chars
-    device_secret = secrets.token_hex(32)     # 64 hex chars
+    device_id = secrets.token_hex(8)  # 16 hex chars
+    device_secret = secrets.token_hex(32)  # 64 hex chars
     canonical = device_id[:8].upper()
     display_code = f"{canonical[:4]}-{canonical[4:]}"
     return device_id, device_secret, display_code
@@ -127,11 +128,13 @@ class PairingClient:
 
     def poll(self, base_url: str, device_id: str, device_secret: str, name: str) -> str:
         """Return one of: pending | approved | forbidden | rate_limited | error."""
-        body = json.dumps({
-            "device_id": device_id,
-            "device_secret": device_secret,
-            "name": name,
-        }).encode("utf-8")
+        body = json.dumps(
+            {
+                "device_id": device_id,
+                "device_secret": device_secret,
+                "name": name,
+            }
+        ).encode("utf-8")
         request = urllib.request.Request(
             f"{base_url.rstrip('/')}/pair/poll",
             data=body,
@@ -163,6 +166,7 @@ class PairingClient:
 # ------------------------------------------------------------------- config
 def render_config(existing: str, host: str, port: int, read_token: str, control_token: str) -> str:
     """Fill connection values into a config.sh, preserving other settings."""
+
     def replace(pattern: str, replacement: str, text: str) -> str:
         compiled = re.compile(pattern, re.MULTILINE)
         if compiled.search(text):
@@ -170,17 +174,21 @@ def render_config(existing: str, host: str, port: int, read_token: str, control_
         return text
 
     text = existing
-    text = replace(r'^HOST_IP=.*$', f'HOST_IP="{host}"', text)
-    text = replace(r'^HOST_PORT=.*$', f'HOST_PORT="{port}"', text)
-    text = replace(r'^DASHBOARD_TOKEN=.*$', f'DASHBOARD_TOKEN="{read_token}"', text)
-    text = replace(r'^CONTROL_TOKEN=.*$', f'CONTROL_TOKEN="{control_token}"', text)
-    text = replace(r'^DASHBOARD_URL=.*$',
-                   'DASHBOARD_URL="http://${HOST_IP}:${HOST_PORT}/dashboard.png?token=${DASHBOARD_TOKEN}"',
-                   text)
+    text = replace(r"^HOST_IP=.*$", f'HOST_IP="{host}"', text)
+    text = replace(r"^HOST_PORT=.*$", f'HOST_PORT="{port}"', text)
+    text = replace(r"^DASHBOARD_TOKEN=.*$", f'DASHBOARD_TOKEN="{read_token}"', text)
+    text = replace(r"^CONTROL_TOKEN=.*$", f'CONTROL_TOKEN="{control_token}"', text)
+    text = replace(
+        r"^DASHBOARD_URL=.*$",
+        'DASHBOARD_URL="http://${HOST_IP}:${HOST_PORT}/dashboard.png?token=${DASHBOARD_TOKEN}"',
+        text,
+    )
     return text
 
 
-def write_config(path: str, example_path: str, host: str, port: int, read_token: str, control_token: str) -> bool:
+def write_config(
+    path: str, example_path: str, host: str, port: int, read_token: str, control_token: str
+) -> bool:
     try:
         if os.path.exists(path):
             with open(path, encoding="utf-8") as handle:
@@ -263,7 +271,9 @@ def run_wizard(
             "rate_limited": "Too many attempts.",
             "error": "Cannot reach host.",
         }
-        emit(messages.get(status, "Pairing failed."), f"Code: {display_code}", "See log for details.")
+        emit(
+            messages.get(status, "Pairing failed."), f"Code: {display_code}", "See log for details."
+        )
         log(f"pairing ended with status={status}")
         return 3
 
@@ -273,7 +283,9 @@ def run_wizard(
     if not token_ok(read_token):
         emit("Pairing returned", "invalid tokens.", "See log for details.")
         return 4
-    if not write_config(config_path, example_path, chosen["address"], chosen["port"], read_token, control_token):
+    if not write_config(
+        config_path, example_path, chosen["address"], chosen["port"], read_token, control_token
+    ):
         emit("Could not write", "config.sh.", "Check log.")
         return 5
 

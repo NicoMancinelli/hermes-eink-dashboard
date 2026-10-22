@@ -22,7 +22,9 @@ def test_control_auth_failures(api_setup) -> None:
     client, _, _, _ = api_setup
 
     # Missing token -> 401
-    resp = client.post("/control", json={"action": "refresh", "tile_id": "t1", "nonce": "n1", "ts": time.time()})
+    resp = client.post(
+        "/control", json={"action": "refresh", "tile_id": "t1", "nonce": "n1", "ts": time.time()}
+    )
     assert resp.status_code == 401
 
     # Wrong token -> 401
@@ -217,4 +219,3 @@ def test_security_headers_present_on_all_endpoints(api_setup) -> None:
         assert resp.headers.get("Cache-Control") == "no-store"
         assert resp.headers.get("X-Content-Type-Options") == "nosniff"
         assert resp.headers.get("X-Frame-Options") == "DENY"
-

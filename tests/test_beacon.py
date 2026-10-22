@@ -1,4 +1,5 @@
 """Tests for the LAN discovery beacon."""
+
 from __future__ import annotations
 
 import asyncio
@@ -40,8 +41,19 @@ class TestPayload:
         assert parse_beacon_payload(b"") is None
         assert parse_beacon_payload(b"{not json") is None
         assert parse_beacon_payload(b'{"service": "other"}') is None
-        assert parse_beacon_payload(json.dumps({"service": "hermes-eink-dashboard", "schema": 99, "port": 1}).encode()) is None
-        bad_port = {"service": "hermes-eink-dashboard", "schema": 1, "port": 99999, "hostname": "h", "instance": "i"}
+        assert (
+            parse_beacon_payload(
+                json.dumps({"service": "hermes-eink-dashboard", "schema": 99, "port": 1}).encode()
+            )
+            is None
+        )
+        bad_port = {
+            "service": "hermes-eink-dashboard",
+            "schema": 1,
+            "port": 99999,
+            "hostname": "h",
+            "instance": "i",
+        }
         assert parse_beacon_payload(json.dumps(bad_port).encode()) is None
         missing = {"service": "hermes-eink-dashboard", "schema": 1, "port": 9120}
         assert parse_beacon_payload(json.dumps(missing).encode()) is None
@@ -93,7 +105,9 @@ class TestRunBeacon:
         async def scenario() -> bytes:
             stop_event = asyncio.Event()
             config = BeaconConfig(port=port, interval_seconds=10, service_port=9120)
-            task = asyncio.create_task(run_beacon(config, stop_event, destinations=("127.0.0.1",), hostname="box"))
+            task = asyncio.create_task(
+                run_beacon(config, stop_event, destinations=("127.0.0.1",), hostname="box")
+            )
             await asyncio.sleep(0.2)
             data, _addr = receiver.recvfrom(2048)
             stop_event.set()

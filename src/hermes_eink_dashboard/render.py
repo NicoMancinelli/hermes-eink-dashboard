@@ -77,7 +77,9 @@ def _wrap_text(
     return lines or [""]
 
 
-def _card(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], radius: int, line: int) -> None:
+def _card(
+    draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], radius: int, line: int
+) -> None:
     draw.rounded_rectangle(box, radius=radius, fill=255, outline=0, width=line)
 
 
@@ -85,13 +87,16 @@ def _label(draw: ImageDraw.ImageDraw, xy: tuple[int, int], text: str, font: Font
     draw.text(xy, text.upper(), fill=0, font=font)
 
 
-def render_dashboard(snapshot: DashboardSnapshot, options: RenderOptions | None = None) -> Image.Image:
+def render_dashboard(
+    snapshot: DashboardSnapshot, options: RenderOptions | None = None
+) -> Image.Image:
     opts = options or RenderOptions()
     if opts.width < 320 or opts.height < 480:
         raise ValueError("dashboard dimensions must be at least 320x480")
 
     width, height = opts.width, opts.height
     scale = min(width / 600, height / 800)
+
     def px(value: float) -> int:
         return max(1, round(value * scale))
 
@@ -142,8 +147,18 @@ def render_dashboard(snapshot: DashboardSnapshot, options: RenderOptions | None 
     x = status_box[0] + px(14)
     y = status_box[1] + px(10)
     indicator = px(12)
-    draw.ellipse((x, y + px(2), x + indicator, y + px(2) + indicator), fill=0 if snapshot.session.status == "working" else 255, outline=0, width=line)
-    _label(draw, (x + indicator + px(8), y), f"{snapshot.session.status} · {snapshot.session.source}", small_font)
+    draw.ellipse(
+        (x, y + px(2), x + indicator, y + px(2) + indicator),
+        fill=0 if snapshot.session.status == "working" else 255,
+        outline=0,
+        width=line,
+    )
+    _label(
+        draw,
+        (x + indicator + px(8), y),
+        f"{snapshot.session.status} · {snapshot.session.source}",
+        small_font,
+    )
     model = _fit_text(draw, snapshot.session.model, body_bold, status_box[2] - x - px(20))
     model_w = draw.textlength(model, font=body_bold)
     draw.text((status_box[2] - px(14) - model_w, y), model, fill=0, font=body_bold)
@@ -155,7 +170,12 @@ def render_dashboard(snapshot: DashboardSnapshot, options: RenderOptions | None 
         y += px(21)
 
     tool_text = f"NOW: {snapshot.session.current_tool}    MESSAGES: {snapshot.session.message_count}    TOOLS: {snapshot.session.tool_call_count}"
-    draw.text((x, status_box[3] - px(56)), _fit_text(draw, tool_text, tiny_font, title_width), fill=0, font=tiny_font)
+    draw.text(
+        (x, status_box[3] - px(56)),
+        _fit_text(draw, tool_text, tiny_font, title_width),
+        fill=0,
+        font=tiny_font,
+    )
     bar_y = status_box[3] - px(32)
     bar_h = px(12)
     bar_w = title_width
@@ -172,16 +192,25 @@ def render_dashboard(snapshot: DashboardSnapshot, options: RenderOptions | None 
     _card(draw, tasks_box, radius, line)
     x = tasks_box[0] + px(14)
     y = tasks_box[1] + px(10)
-    _label(draw, (x, y), f"Active tasks · {len(snapshot.tasks)} shown · {snapshot.kanban_active} kanban", small_font)
+    _label(
+        draw,
+        (x, y),
+        f"Active tasks · {len(snapshot.tasks)} shown · {snapshot.kanban_active} kanban",
+        small_font,
+    )
     y += px(25)
-    task_line_h = max(px(29), round((tasks_box[3] - y - px(8)) / max(1, min(6, len(snapshot.tasks) or 1))))
+    task_line_h = max(
+        px(29), round((tasks_box[3] - y - px(8)) / max(1, min(6, len(snapshot.tasks) or 1)))
+    )
     if not snapshot.tasks:
         draw.text((x, y), "No active tasks", fill=0, font=body_font)
     for task in snapshot.tasks[:6]:
         box_size = px(12)
         draw.rectangle((x, y + px(2), x + box_size, y + px(2) + box_size), outline=0, width=line)
         if task.status == "in_progress":
-            draw.rectangle((x + px(3), y + px(5), x + box_size - px(3), y + box_size - px(1)), fill=0)
+            draw.rectangle(
+                (x + px(3), y + px(5), x + box_size - px(3), y + box_size - px(1)), fill=0
+            )
         status = "NOW" if task.status == "in_progress" else "NEXT"
         prefix = f"{status}  "
         draw.text((x + box_size + px(8), y), prefix, fill=0, font=body_bold)
@@ -214,7 +243,9 @@ def render_dashboard(snapshot: DashboardSnapshot, options: RenderOptions | None 
         draw.text((cell_x, y), value, fill=0, font=value_font)
         draw.text((cell_x, y + px(27)), label, fill=0, font=small_font)
         if index:
-            draw.line((cell_x - px(9), y, cell_x - px(9), memory_box[3] - px(12)), fill=0, width=line)
+            draw.line(
+                (cell_x - px(9), y, cell_x - px(9), memory_box[3] - px(12)), fill=0, width=line
+            )
 
     # Recent activity card
     _card(draw, activity_box, radius, line)
@@ -226,7 +257,12 @@ def render_dashboard(snapshot: DashboardSnapshot, options: RenderOptions | None 
     event_line_h = px(20)
     for event in snapshot.recent_events[-5:]:
         draw.rectangle((x, y + px(5), x + px(5), y + px(10)), fill=0)
-        draw.text((x + px(12), y), _fit_text(draw, event, event_font, event_width - px(12)), fill=0, font=event_font)
+        draw.text(
+            (x + px(12), y),
+            _fit_text(draw, event, event_font, event_width - px(12)),
+            fill=0,
+            font=event_font,
+        )
         y += event_line_h
         if y + event_line_h > activity_box[3] - px(5):
             break
@@ -251,6 +287,7 @@ def render_layout_dashboard(
 
     width, height = opts.width, opts.height
     scale = min(width / 600, height / 800)
+
     def px(value: float) -> int:
         return max(1, round(value * scale))
 
@@ -318,7 +355,7 @@ def render_layout_dashboard(
         y1 = round(y0 + tile.h * cell_h + (tile.h - 1) * gap)
         box = (x0, y0, x1, y1)
 
-        is_focused = (tile.id == focused_id)
+        is_focused = tile.id == focused_id
         border_w = 2 if is_focused else 1
 
         draw.rounded_rectangle(box, radius=radius, fill=255, outline=0, width=border_w)
@@ -349,7 +386,9 @@ def render_layout_dashboard(
                 panels_dict = snapshot.get("panels", {})
                 pdata = panels_dict.get(panel_name, {})
                 meta = pdata.get("_meta", {}) if isinstance(pdata, dict) else {}
-                pstatus = meta.get("status", "unavailable") if isinstance(meta, dict) else "unavailable"
+                pstatus = (
+                    meta.get("status", "unavailable") if isinstance(meta, dict) else "unavailable"
+                )
                 status_text = f"STATUS: {str(pstatus).upper()}"
                 if panel_name == "hermes" and pstatus in {"ok", "stale"}:
                     try:
@@ -374,7 +413,12 @@ def render_layout_dashboard(
             if hermes_snap is not None and inner_h > px(60):
                 py = inner_y0 + px(42)
                 model_str = f"MODEL: {hermes_snap.session.model}"
-                draw.text((inner_x0, py), _fit_text(draw, model_str, tiny_font, inner_w), fill=0, font=tiny_font)
+                draw.text(
+                    (inner_x0, py),
+                    _fit_text(draw, model_str, tiny_font, inner_w),
+                    fill=0,
+                    font=tiny_font,
+                )
                 py += px(16)
                 if py + px(16) <= inner_y1:
                     title_str = _fit_text(draw, hermes_snap.session.title, body_font, inner_w)
@@ -382,7 +426,12 @@ def render_layout_dashboard(
                     py += px(20)
                 if py + px(16) <= inner_y1:
                     ctx_str = f"CONTEXT: {hermes_snap.session.context_percent}%  ·  TASKS: {len(hermes_snap.tasks)}"
-                    draw.text((inner_x0, py), _fit_text(draw, ctx_str, tiny_font, inner_w), fill=0, font=tiny_font)
+                    draw.text(
+                        (inner_x0, py),
+                        _fit_text(draw, ctx_str, tiny_font, inner_w),
+                        fill=0,
+                        font=tiny_font,
+                    )
 
             elif prompt_data is not None and inner_h > px(40):
                 # Last Hermes quick-prompt answer (sanitized host-side).
@@ -403,7 +452,9 @@ def render_layout_dashboard(
                     font=small_font,
                 )
                 body_text = str(
-                    prompt_data.get("error_excerpt", "") if failed else prompt_data.get("response_excerpt", "")
+                    prompt_data.get("error_excerpt", "")
+                    if failed
+                    else prompt_data.get("response_excerpt", "")
                 ).strip()
                 if body_text:
                     py = inner_y0 + px(60)
@@ -428,4 +479,3 @@ def render_layout_dashboard(
     if opts.bit_depth == 1:
         return image.convert("1", dither=Image.Dither.NONE)
     return image
-

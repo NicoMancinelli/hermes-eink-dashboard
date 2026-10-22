@@ -34,7 +34,9 @@ def sample_snapshot() -> DashboardSnapshot:
             TaskState("Verify the endpoint from Wi-Fi", "pending", "kanban"),
         ),
         kanban_active=1,
-        memory=MemoryState(fact_count=185, average_trust=0.82, retrieved_facts=90, profile_chars=10745),
+        memory=MemoryState(
+            fact_count=185, average_trust=0.82, retrieved_facts=90, profile_chars=10745
+        ),
         recent_events=(
             "gpt-5.6-sol via openai-codex · 131072 in / 1024 out · 12.4s",
             "tool terminal completed",
@@ -173,16 +175,20 @@ def test_render_layout_dashboard_label_variations() -> None:
     from hermes_eink_dashboard.contract import Tile, dashboard_json
     from hermes_eink_dashboard.render import render_layout_dashboard
 
-    layout1 = dashboard_json({
-        "columns": 2,
-        "rows": 2,
-        "tiles": [Tile(id="t1", label="Action Alpha", col=0, row=0, kind="action")]
-    })
-    layout2 = dashboard_json({
-        "columns": 2,
-        "rows": 2,
-        "tiles": [Tile(id="t1", label="Action Beta", col=0, row=0, kind="action")]
-    })
+    layout1 = dashboard_json(
+        {
+            "columns": 2,
+            "rows": 2,
+            "tiles": [Tile(id="t1", label="Action Alpha", col=0, row=0, kind="action")],
+        }
+    )
+    layout2 = dashboard_json(
+        {
+            "columns": 2,
+            "rows": 2,
+            "tiles": [Tile(id="t1", label="Action Beta", col=0, row=0, kind="action")],
+        }
+    )
 
     img1 = render_layout_dashboard(layout1)
     img2 = render_layout_dashboard(layout2)
@@ -199,11 +205,15 @@ def test_render_layout_dashboard_panel_preview_with_and_without_snapshot() -> No
     from hermes_eink_dashboard.contract import Tile, dashboard_json
     from hermes_eink_dashboard.render import render_layout_dashboard
 
-    layout = dashboard_json({
-        "columns": 2,
-        "rows": 2,
-        "tiles": [Tile(id="p1", label="Hermes", col=0, row=0, w=2, h=2, kind="panel", panel="hermes")]
-    })
+    layout = dashboard_json(
+        {
+            "columns": 2,
+            "rows": 2,
+            "tiles": [
+                Tile(id="p1", label="Hermes", col=0, row=0, w=2, h=2, kind="panel", panel="hermes")
+            ],
+        }
+    )
 
     img_no_snap = render_layout_dashboard(layout, snapshot=None)
     img_snap = render_layout_dashboard(layout, snapshot=sample_snapshot())
@@ -211,6 +221,6 @@ def test_render_layout_dashboard_panel_preview_with_and_without_snapshot() -> No
     hash_no_snap = hashlib.sha256(img_no_snap.tobytes()).hexdigest()
     hash_snap = hashlib.sha256(img_snap.tobytes()).hexdigest()
 
-    assert hash_no_snap != hash_snap, "Panel preview with snapshot data must differ from panel preview without snapshot"
-
-
+    assert hash_no_snap != hash_snap, (
+        "Panel preview with snapshot data must differ from panel preview without snapshot"
+    )

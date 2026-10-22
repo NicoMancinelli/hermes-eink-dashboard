@@ -172,4 +172,3 @@ def test_control_bus_async_wakeup() -> None:
 
     event = asyncio.run(scenario())
     assert event == {"action": "refresh"}
-

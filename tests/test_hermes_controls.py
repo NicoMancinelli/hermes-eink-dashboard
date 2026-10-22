@@ -1,4 +1,5 @@
 """Tests for Hermes-native controls (hermes_controls.py)."""
+
 from __future__ import annotations
 
 import json
@@ -130,10 +131,17 @@ class TestCliTransport:
             captured["kwargs"] = kwargs
             return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
-        config = HermesControlsConfig(cli_path="/usr/bin/hermes", cli_extra_args=["--profile", "work"])
+        config = HermesControlsConfig(
+            cli_path="/usr/bin/hermes", cli_extra_args=["--profile", "work"]
+        )
         CliTransport(config, run=fake_run).send_prompt("hello world")
         assert captured["argv"] == [
-            "/usr/bin/hermes", "--profile", "work", "chat", "--query-file", "-",
+            "/usr/bin/hermes",
+            "--profile",
+            "work",
+            "chat",
+            "--query-file",
+            "-",
         ]
         assert captured["kwargs"]["input"] == "hello world"
         assert captured["kwargs"]["shell"] is False

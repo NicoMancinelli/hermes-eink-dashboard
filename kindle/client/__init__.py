@@ -1,4 +1,5 @@
 """Interactive Kindle client for the Hermes E-Ink Dashboard."""
+
 from .interactive import (
     BusClient,
     DashboardClient,

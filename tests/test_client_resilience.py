@@ -1,4 +1,5 @@
 """Resilience tests: transient network failures never kill the interactive client."""
+
 from __future__ import annotations
 
 import threading
@@ -196,7 +197,9 @@ class TestClientResilience:
     def test_fatal_401_stops_client_with_exit_code(self) -> None:
         class AuthDeadBus(FlakyBus):
             def get_layout(self):
-                raise urllib.error.HTTPError("http://h/dashboard.json", 401, "unauthorized", None, None)
+                raise urllib.error.HTTPError(
+                    "http://h/dashboard.json", 401, "unauthorized", None, None
+                )
 
         client = _client(AuthDeadBus(), painter=RecordingPainter())
         result = client.run()

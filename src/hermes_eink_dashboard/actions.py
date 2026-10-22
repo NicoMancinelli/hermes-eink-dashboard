@@ -83,12 +83,16 @@ class ActionRegistry:
 
         # 1. Timestamp window check (+/- 30s)
         if abs(current_time - ts_float) > 30.0:
-            LOGGER.warning("action=%s result=invalid_timestamp ts=%f now=%f", action, ts_float, current_time)
+            LOGGER.warning(
+                "action=%s result=invalid_timestamp ts=%f now=%f", action, ts_float, current_time
+            )
             raise InvalidTimestampError("Timestamp is outside the allowed +-30s window")
 
         with self._lock:
             # 2. Nonce TTL cleanup (60s)
-            expired = [n for n, record_time in self._nonces.items() if current_time - record_time > 60.0]
+            expired = [
+                n for n, record_time in self._nonces.items() if current_time - record_time > 60.0
+            ]
             for n in expired:
                 del self._nonces[n]
 
@@ -101,7 +105,9 @@ class ActionRegistry:
             matched_key = action if action in self._allowed else None
             if matched_key is None:
                 for allowed_action in self._allowed:
-                    if action.startswith(allowed_action + ".") or action.startswith(allowed_action + ":"):
+                    if action.startswith(allowed_action + ".") or action.startswith(
+                        allowed_action + ":"
+                    ):
                         matched_key = allowed_action
                         break
 
@@ -113,7 +119,9 @@ class ActionRegistry:
             limit = self._action_rate_limits.get(matched_key, self._default_rate_limit)
             last = self._last_executed.get(matched_key)
             if last is not None and (current_time - last) < limit:
-                LOGGER.warning("action=%s result=rate_limited last=%f now=%f", action, last, current_time)
+                LOGGER.warning(
+                    "action=%s result=rate_limited last=%f now=%f", action, last, current_time
+                )
                 raise RateLimitExceededError(f"Rate limit exceeded for action '{action}'")
 
             # Record state
@@ -134,6 +142,7 @@ class ActionRegistry:
                 self._pending.add(future)
             future.add_done_callback(self._drop_pending)
             if on_complete is not None:
+
                 def _notify(fut: Future) -> None:
                     self._notify_complete(on_complete, fut, action, tile_id)
 
@@ -193,6 +202,7 @@ class ActionRegistry:
         the background without blocking the request loop.
         """
         import time as _time
+
         deadline = _time.monotonic() + max(0.0, timeout)
         while True:
             with self._lock:

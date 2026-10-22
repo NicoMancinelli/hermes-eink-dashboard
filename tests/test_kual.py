@@ -30,13 +30,27 @@ def test_kual_extension_contains_required_actions_and_scripts() -> None:
     assert root["name"] == "Hermes Dashboard"
     actions = {item["name"]: item["params"] for item in root["items"]}
     # Required menu entries.
-    assert actions["Setup Wizard (pair Kindle)"] == "/mnt/us/extensions/hermes_dashboard/bin/start_wizard.sh"
-    assert actions["Start Dashboard (read-only)"] == "/mnt/us/extensions/hermes_dashboard/bin/start.sh"
-    assert actions["Start Interactive Dashboard"] == "/mnt/us/extensions/hermes_dashboard/bin/start_interactive.sh"
+    assert (
+        actions["Setup Wizard (pair Kindle)"]
+        == "/mnt/us/extensions/hermes_dashboard/bin/start_wizard.sh"
+    )
+    assert (
+        actions["Start Dashboard (read-only)"] == "/mnt/us/extensions/hermes_dashboard/bin/start.sh"
+    )
+    assert (
+        actions["Start Interactive Dashboard"]
+        == "/mnt/us/extensions/hermes_dashboard/bin/start_interactive.sh"
+    )
     assert actions["Manual Refresh"] == "/mnt/us/extensions/hermes_dashboard/bin/refresh.sh"
     assert actions["Stop Dashboard"] == "/mnt/us/extensions/hermes_dashboard/bin/stop.sh"
-    assert actions["Stop Interactive Dashboard"] == "/mnt/us/extensions/hermes_dashboard/bin/stop_interactive.sh"
-    assert actions["Run Post-Install (configure host + tokens)"] == "/mnt/us/extensions/hermes_dashboard/bin/post_install.sh"
+    assert (
+        actions["Stop Interactive Dashboard"]
+        == "/mnt/us/extensions/hermes_dashboard/bin/stop_interactive.sh"
+    )
+    assert (
+        actions["Run Post-Install (configure host + tokens)"]
+        == "/mnt/us/extensions/hermes_dashboard/bin/post_install.sh"
+    )
 
 
 def test_kindle_scripts_are_posix_shell_and_have_lifecycle_guards() -> None:
@@ -66,7 +80,6 @@ def test_committed_kindle_config_is_generic_and_secret_free() -> None:
     assert "neek" not in config.lower()
 
 
-
 def test_built_bundle_includes_interactive_client() -> None:
     """The bundle builder must include the Python interactive client."""
     import subprocess
@@ -94,7 +107,7 @@ def test_python_launchers_auto_bootstrap_mrpackage() -> None:
     for name in ("bin/start_interactive.sh", "bin/start_wizard.sh"):
         text = (EXTENSION / name).read_text()
         assert "mrpackage install kindle-python3" in text
-        assert 'AUTO_INSTALL_PYTHON:-1' in text
+        assert "AUTO_INSTALL_PYTHON:-1" in text
 
 
 def test_setup_wizard_auto_starts_dashboard_after_pairing() -> None:

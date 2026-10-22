@@ -6,6 +6,7 @@ circuit, actions/controls registration, pairing toggles and the beacon. These
 drive ``main()`` with ``uvicorn.run`` patched out so the whole function runs
 without binding a port.
 """
+
 from __future__ import annotations
 
 import logging
@@ -63,13 +64,20 @@ def base_args(tmp_path: Path, hermes_home: Path, monkeypatch: pytest.MonkeyPatch
 
     def factory(**overrides) -> list[str]:
         args = [
-            "--hermes-home", str(hermes_home),
-            "--token", READ_TOKEN,
-            "--token-file", str(tmp_path / "absent-token"),
-            "--control-token", CONTROL_TOKEN,
-            "--control-token-file", str(tmp_path / "absent-control-token"),
-            "--devices-file", str(tmp_path / "devices.json"),
-            "--discovery-port", "0",
+            "--hermes-home",
+            str(hermes_home),
+            "--token",
+            READ_TOKEN,
+            "--token-file",
+            str(tmp_path / "absent-token"),
+            "--control-token",
+            CONTROL_TOKEN,
+            "--control-token-file",
+            str(tmp_path / "absent-control-token"),
+            "--devices-file",
+            str(tmp_path / "devices.json"),
+            "--discovery-port",
+            "0",
         ]
         for flag, value in overrides.items():
             flag = "--" + flag.replace("_", "-")
@@ -159,9 +167,7 @@ class TestPositiveFloat:
 
 
 class TestRenderOnce:
-    def test_writes_a_png_and_returns_zero(
-        self, base_args, served, tmp_path: Path, capsys
-    ) -> None:
+    def test_writes_a_png_and_returns_zero(self, base_args, served, tmp_path: Path, capsys) -> None:
         out = tmp_path / "nested" / "dashboard.png"
         assert main(base_args(render_once=out, width=600, height=800)) == 0
 
@@ -172,9 +178,7 @@ class TestRenderOnce:
         # --render-once must not start a server.
         assert "app" not in served
 
-    def test_honours_the_requested_bit_depth(
-        self, base_args, served, tmp_path: Path
-    ) -> None:
+    def test_honours_the_requested_bit_depth(self, base_args, served, tmp_path: Path) -> None:
         out = tmp_path / "dashboard8.png"
         assert main(base_args(render_once=out, width=1072, height=1448, bit_depth=8)) == 0
         with Image.open(out) as image:
@@ -188,18 +192,14 @@ class TestRenderOnce:
         with Image.open(out) as image:
             assert image.size == (1072, 1448)
 
-    def test_render_once_needs_no_token(
-        self, base_args, served, tmp_path: Path
-    ) -> None:
+    def test_render_once_needs_no_token(self, base_args, served, tmp_path: Path) -> None:
         """Offline rendering must work before the service is ever configured."""
         out = tmp_path / "dashboard.png"
         args = base_args.without_token()
         assert main([*args, "--render-once", str(out), "--width", "600", "--height", "800"]) == 0
         assert out.is_file()
 
-    def test_layout_yaml_override_is_applied(
-        self, base_args, served, tmp_path: Path
-    ) -> None:
+    def test_layout_yaml_override_is_applied(self, base_args, served, tmp_path: Path) -> None:
         layout = tmp_path / "layout.yaml"
         layout.write_text(
             "columns: 1\nrows: 2\ntiles:\n"
@@ -218,9 +218,7 @@ class TestRenderOnce:
             main(base_args(render_once=tmp_path / "x.png", layout_yaml=layout))
         assert "invalid layout YAML" in str(excinfo.value)
 
-    def test_missing_layout_file_falls_back_to_the_default(
-        self, base_args, tmp_path: Path
-    ) -> None:
+    def test_missing_layout_file_falls_back_to_the_default(self, base_args, tmp_path: Path) -> None:
         """A typo'd --layout-yaml path must not crash the render."""
         out = tmp_path / "fallback.png"
         assert main(base_args(render_once=out, layout_yaml=tmp_path / "nope.yaml")) == 0
@@ -246,43 +244,43 @@ class TestServeBootstrap:
         assert main(base_args()) == 0
         assert served["access_log"] is False
 
-    def test_read_token_authenticates_the_legacy_png_route(
-        self, base_args, served, capsys
-    ) -> None:
+    def test_read_token_authenticates_the_legacy_png_route(self, base_args, served, capsys) -> None:
         assert main(base_args(width=600, height=800)) == 0
         with self._app(served) as client:
             assert client.get("/dashboard.png").status_code == 401
             assert client.get(f"/dashboard.png?token={READ_TOKEN}").status_code == 200
 
-    def test_write_endpoints_are_live_with_a_control_token(
-        self, base_args, served
-    ) -> None:
+    def test_write_endpoints_are_live_with_a_control_token(self, base_args, served) -> None:
         assert main(base_args()) == 0
         with self._app(served) as client:
             # Read token must never be silently granted write access.
-            assert client.post(
-                "/control",
-                headers={"Authorization": f"Bearer {READ_TOKEN}"},
-                json={"action": "workflow.refresh"},
-            ).status_code == 401
+            assert (
+                client.post(
+                    "/control",
+                    headers={"Authorization": f"Bearer {READ_TOKEN}"},
+                    json={"action": "workflow.refresh"},
+                ).status_code
+                == 401
+            )
             assert client.post(
                 "/control",
                 headers={"Authorization": f"Bearer {CONTROL_TOKEN}"},
                 json={"action": "workflow.refresh"},
             ).status_code in (200, 400, 409)
 
-    def test_control_endpoints_are_503_without_a_control_token(
-        self, base_args, served
-    ) -> None:
+    def test_control_endpoints_are_503_without_a_control_token(self, base_args, served) -> None:
         """The secure default: no control token means no write access at all."""
         args = base_args.without_control_token()
         assert main(args) == 0
         with self._app(served) as client:
-            assert client.post(
-                "/control",
-                headers={"Authorization": f"Bearer {READ_TOKEN}"},
-                json={"action": "workflow.refresh"},
-            ).status_code == 503
+            assert (
+                client.post(
+                    "/control",
+                    headers={"Authorization": f"Bearer {READ_TOKEN}"},
+                    json={"action": "workflow.refresh"},
+                ).status_code
+                == 503
+            )
 
     def test_insecure_mode_serves_without_a_token(self, base_args, served) -> None:
         args = base_args.without_token()
@@ -334,28 +332,24 @@ class TestServeBootstrap:
         assert payload["schema_version"] == 1
         assert payload["panels"]["hermes"]["session"]["model"] == "gpt-test"
 
-    def test_verbose_switch_configures_debug_logging(
-        self, base_args, served, monkeypatch
-    ) -> None:
+    def test_verbose_switch_configures_debug_logging(self, base_args, served, monkeypatch) -> None:
         """--verbose must request DEBUG from logging.basicConfig."""
         calls: list[dict] = []
-        monkeypatch.setattr(
-            server_module.logging, "basicConfig", lambda **kw: calls.append(kw)
-        )
+        monkeypatch.setattr(server_module.logging, "basicConfig", lambda **kw: calls.append(kw))
         assert main(base_args(verbose=True)) == 0
         assert calls and calls[0]["level"] == logging.DEBUG
 
     def test_default_log_level_is_info(self, base_args, served, monkeypatch) -> None:
         calls: list[dict] = []
-        monkeypatch.setattr(
-            server_module.logging, "basicConfig", lambda **kw: calls.append(kw)
-        )
+        monkeypatch.setattr(server_module.logging, "basicConfig", lambda **kw: calls.append(kw))
         assert main(base_args()) == 0
         assert calls and calls[0]["level"] == logging.INFO
 
 
 class TestHermesNativeControls:
-    def test_controls_config_adds_action_tiles(self, base_args, served, tmp_path: Path, monkeypatch) -> None:
+    def test_controls_config_adds_action_tiles(
+        self, base_args, served, tmp_path: Path, monkeypatch
+    ) -> None:
         from fastapi.testclient import TestClient
 
         actions_dir = tmp_path / "actions"

@@ -23,6 +23,7 @@ The bundle layout:
 
 The bundle is unpacked on the Kindle at ``/mnt/us/extensions/hermes_dashboard/``.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -93,7 +94,9 @@ def _validate_host(host: str) -> str:
     # The bundled placeholder host is allowed through untouched; anything else
     # must match the safe-character pattern.
     if host != PLACEHOLDER_HOST and not SAFE_HOST.fullmatch(host):
-        raise SystemExit("host may contain only letters, numbers, dots, colons, underscores, and hyphens")
+        raise SystemExit(
+            "host may contain only letters, numbers, dots, colons, underscores, and hyphens"
+        )
     return host
 
 
@@ -156,9 +159,7 @@ def build(
         # Bundle the first-run pairing wizard as well.
         setup_wizard = ROOT / "kindle" / "client" / "setup_wizard.py"
         if setup_wizard.exists():
-            (extension / "bin" / "setup_wizard.py").write_bytes(
-                setup_wizard.read_bytes()
-            )
+            (extension / "bin" / "setup_wizard.py").write_bytes(setup_wizard.read_bytes())
         example = extension / "config.sh.example"
         config = example.read_text(encoding="utf-8")
         config = config.replace('HOST_IP="HOST_IP"', f'HOST_IP="{host}"')
@@ -170,7 +171,9 @@ def build(
         for script in (extension / "bin").glob("*.sh"):
             script.chmod(0o755)
 
-        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        with zipfile.ZipFile(
+            output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
+        ) as archive:
             for path in sorted(extension.rglob("*")):
                 if path.is_file():
                     archive.write(path, path.relative_to(extension.parent))

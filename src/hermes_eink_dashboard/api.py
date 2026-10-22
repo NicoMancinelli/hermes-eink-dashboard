@@ -70,7 +70,9 @@ async def _json_body(request: Request) -> dict[str, Any]:
     try:
         body = await request.json()
     except Exception:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload"
+        ) from None
     if not isinstance(body, dict):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
     return body
@@ -79,10 +81,14 @@ async def _json_body(request: Request) -> dict[str, Any]:
 def _legacy_snapshot(payload: dict[str, Any]) -> DashboardSnapshot:
     panel = payload.get("panels", {}).get("hermes")
     if not isinstance(panel, dict):
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Hermes state unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Hermes state unavailable"
+        )
     meta = panel.get("_meta", {})
     if not isinstance(meta, dict) or meta.get("status") not in {"ok", "stale"}:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Hermes state unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Hermes state unavailable"
+        )
     generated_at = meta.get("updated_at") or payload["generated_at"]
     data = {key: value for key, value in panel.items() if key != "_meta"}
     try:
@@ -200,7 +206,9 @@ def create_app(
             if app.state.layout is not None or target_focus is not None:
                 eff_layout = dict(
                     app.state.layout
-                    or build_default_layout(settings.width, settings.height, panels=("hermes", "prompt_response"))
+                    or build_default_layout(
+                        settings.width, settings.height, panels=("hermes", "prompt_response")
+                    )
                 )
                 if target_focus:
                     eff_layout["focus"] = {"tile_id": target_focus}
@@ -238,7 +246,9 @@ def create_app(
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload"
+            ) from None
         if not isinstance(body, dict):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
 
@@ -279,13 +289,21 @@ def create_app(
         except UnknownActionError:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from None
         except RateLimitExceededError:
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="rate_limited") from None
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="rate_limited"
+            ) from None
         except InvalidTimestampError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_timestamp") from None
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_timestamp"
+            ) from None
         except InvalidNonceError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_nonce") from None
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_nonce"
+            ) from None
         except (ActionError, ValueError, TypeError):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload"
+            ) from None
 
         control_bus.publish({"phase": "ack", **res})
         return JSONResponse({"status": "ok", "action": action, "tile_id": tile_id})
@@ -303,7 +321,9 @@ def create_app(
         """List pending/approved devices (admin only; no secrets returned)."""
         _require_control_auth(request, settings)
         if settings.pairing is None:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable"
+            )
         return JSONResponse({"devices": settings.pairing.list_devices()})
 
     @app.post("/pair/approve")
@@ -311,12 +331,16 @@ def create_app(
         """Approve a pending device (by device_id or display code)."""
         _require_control_auth(request, settings)
         if settings.pairing is None:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable"
+            )
         body = await _json_body(request)
         try:
             record = settings.pairing.approve(str(body.get("device", "")))
         except PairingValidationError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload"
+            ) from None
         if record is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown_device")
         return JSONResponse({"status": "ok", "device": record.public_view()})
@@ -326,12 +350,16 @@ def create_app(
         """Remove a pending or approved device."""
         _require_control_auth(request, settings)
         if settings.pairing is None:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable"
+            )
         body = await _json_body(request)
         try:
             removed = settings.pairing.deny(str(body.get("device", "")))
         except PairingValidationError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload"
+            ) from None
         if not removed:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown_device")
         return JSONResponse({"status": "ok"})
@@ -340,7 +368,9 @@ def create_app(
     async def post_pair_poll(request: Request) -> JSONResponse:
         """Unauthenticated device-flow poll; see hermes_eink_dashboard.pairing."""
         if settings.pairing is None:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable"
+            )
         body = await _json_body(request)
         try:
             result = settings.pairing.poll(
@@ -349,19 +379,25 @@ def create_app(
                 body.get("name"),
             )
         except PairingValidationError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload"
+            ) from None
         if result.status == "forbidden":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
         if result.status == "rate_limited":
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="rate_limited")
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="rate_limited"
+            )
         if result.status == "pending":
             return JSONResponse({"status": "pending"})
-        return JSONResponse({
-            "status": "approved",
-            "read_token": result.read_token,
-            "control_token": result.control_token,
-            "device_name": result.name,
-        })
+        return JSONResponse(
+            {
+                "status": "approved",
+                "read_token": result.read_token,
+                "control_token": result.control_token,
+                "device_name": result.name,
+            }
+        )
 
     @app.get("/config")
     async def get_config(request: Request) -> JSONResponse:
@@ -370,7 +406,12 @@ def create_app(
         config_manager = app.state.config_manager
         config = config_manager.load()
         if config is None:
-            return JSONResponse({"config": None, "message": "No configuration file found. POST to /config to create one."})
+            return JSONResponse(
+                {
+                    "config": None,
+                    "message": "No configuration file found. POST to /config to create one.",
+                }
+            )
         return JSONResponse({"config": config.model_dump()})
 
     @app.post("/config")
@@ -380,26 +421,32 @@ def create_app(
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload"
+            ) from None
         if not isinstance(body, dict):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
 
         try:
             config = ConfigSchema(**body)
         except Exception as e:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from None
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+            ) from None
 
         config_manager = app.state.config_manager
         config_manager.save(config)
         config_manager.regenerate_config_sh(config)
         config_sh_path = config_manager.safe_output_path
 
-        return JSONResponse({
-            "status": "ok",
-            "message": "Configuration saved and config.sh regenerated",
-            "config": config.model_dump(),
-            "config_sh_path": str(config_sh_path),
-        })
+        return JSONResponse(
+            {
+                "status": "ok",
+                "message": "Configuration saved and config.sh regenerated",
+                "config": config.model_dump(),
+                "config_sh_path": str(config_sh_path),
+            }
+        )
 
     @app.post("/config/preview")
     async def post_config_preview(request: Request) -> JSONResponse:
@@ -408,23 +455,29 @@ def create_app(
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload") from None
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload"
+            ) from None
         if not isinstance(body, dict):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_payload")
 
         try:
             config = ConfigSchema(**body)
         except Exception as e:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from None
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+            ) from None
 
         config_manager = app.state.config_manager
         template = config_manager.load_template()
         rendered = config.to_config_sh(template)
 
-        return JSONResponse({
-            "status": "ok",
-            "preview": rendered,
-        })
+        return JSONResponse(
+            {
+                "status": "ok",
+                "preview": rendered,
+            }
+        )
 
     @app.get("/config/example")
     async def get_config_example(request: Request) -> JSONResponse:
@@ -432,9 +485,10 @@ def create_app(
         _require_control_auth(request, settings)
         config_manager = app.state.config_manager
         example_yaml = config_manager.get_example_config()
-        return JSONResponse({
-            "example_yaml": example_yaml,
-        })
+        return JSONResponse(
+            {
+                "example_yaml": example_yaml,
+            }
+        )
 
     return app
-

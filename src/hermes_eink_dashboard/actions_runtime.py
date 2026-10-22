@@ -16,6 +16,7 @@ Handlers:
 
 register_all_actions() wires all four handlers to an ActionRegistry.
 """
+
 from __future__ import annotations
 
 import json
@@ -43,7 +44,10 @@ def parse_action_config(content: str, logger: logging.Logger | None = None) -> d
     """
     log = logger or LOGGER
     if len(content.encode("utf-8")) > MAX_ACTION_CONFIG_SIZE_BYTES:
-        log.warning("Action config exceeds maximum allowed size of 1MB (%d bytes)", len(content.encode("utf-8")))
+        log.warning(
+            "Action config exceeds maximum allowed size of 1MB (%d bytes)",
+            len(content.encode("utf-8")),
+        )
         return {}
     result: dict[str, list[str]] = {}
     for line_num, raw_line in enumerate(content.splitlines(), start=1):
@@ -65,19 +69,27 @@ def parse_action_config(content: str, logger: logging.Logger | None = None) -> d
             log.warning("Skipping malformed config line %d: invalid JSON (%s)", line_num, err)
             continue
         if not isinstance(parsed, list):
-            log.warning("Skipping malformed config line %d: command_argv must be a JSON array", line_num)
+            log.warning(
+                "Skipping malformed config line %d: command_argv must be a JSON array", line_num
+            )
             continue
         result[name] = [str(x) for x in parsed]
     return result
 
 
-def load_action_config(filepath: Path | str, logger: logging.Logger | None = None) -> dict[str, list[str]]:
+def load_action_config(
+    filepath: Path | str, logger: logging.Logger | None = None
+) -> dict[str, list[str]]:
     path = Path(filepath)
     if not path.exists():
         return {}
     log = logger or LOGGER
     if path.stat().st_size > MAX_ACTION_CONFIG_SIZE_BYTES:
-        log.warning("Action config file %s exceeds maximum allowed size of 1MB (%d bytes)", path, path.stat().st_size)
+        log.warning(
+            "Action config file %s exceeds maximum allowed size of 1MB (%d bytes)",
+            path,
+            path.stat().st_size,
+        )
         return {}
     return parse_action_config(path.read_text(encoding="utf-8"), logger=logger)
 

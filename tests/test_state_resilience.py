@@ -5,6 +5,7 @@ contract is that a damaged, absent, locked or hostile input degrades the panel
 instead of raising -- a dashboard that crashes on one bad file is worse than
 one that shows less. ``test_state.py`` covers the happy path only.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -60,8 +61,21 @@ def _session_db(tmp_path: Path, *, ended_at: str = "NULL", input_tokens: int = 1
     conn.executescript(SESSIONS_DDL)
     conn.execute(
         "INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        ("live", "tui", "gpt-test", 900, None if ended_at == "NULL" else float(ended_at),
-         4, 1, input_tokens, 128, 0, "Work", None, 0),
+        (
+            "live",
+            "tui",
+            "gpt-test",
+            900,
+            None if ended_at == "NULL" else float(ended_at),
+            4,
+            1,
+            input_tokens,
+            128,
+            0,
+            "Work",
+            None,
+            0,
+        ),
     )
     conn.execute(
         "INSERT INTO messages VALUES (?,?,?,?,?,?)",
@@ -240,9 +254,7 @@ class TestSessionSelection:
     def test_the_latest_tool_is_reported(self, tmp_path: Path) -> None:
         _session_db(tmp_path)
         conn = sqlite3.connect(tmp_path / "state.db")
-        conn.execute(
-            "INSERT INTO messages VALUES (2,'live','tool','{}','terminal',1010)"
-        )
+        conn.execute("INSERT INTO messages VALUES (2,'live','tool','{}','terminal',1010)")
         conn.commit()
         conn.close()
         assert _collector(tmp_path).collect().session.current_tool == "terminal"
@@ -353,9 +365,7 @@ class TestTodoTasks:
     def _todo_session(self, tmp_path: Path, payload: str) -> None:
         _session_db(tmp_path)
         conn = sqlite3.connect(tmp_path / "state.db")
-        conn.execute(
-            "INSERT INTO messages VALUES (2,'live','tool',?,'todo',1005)", (payload,)
-        )
+        conn.execute("INSERT INTO messages VALUES (2,'live','tool',?,'todo',1005)", (payload,))
         conn.commit()
         conn.close()
 
@@ -370,9 +380,7 @@ class TestTodoTasks:
         assert snapshot.tasks[0].source == "session"
 
     def test_title_is_taken_from_the_first_task(self, tmp_path: Path) -> None:
-        self._todo_session(
-            tmp_path, '{"todos": [{"content": "ship v1", "status": "pending"}]}'
-        )
+        self._todo_session(tmp_path, '{"todos": [{"content": "ship v1", "status": "pending"}]}')
         assert _collector(tmp_path).collect().session.title == "ship v1"
 
     def test_malformed_json_is_skipped(self, tmp_path: Path) -> None:
@@ -425,8 +433,7 @@ class TestKanban:
     def test_works_without_an_updated_at_column(self, tmp_path: Path) -> None:
         conn = sqlite3.connect(tmp_path / "kanban.db")
         conn.executescript(
-            "CREATE TABLE tasks (title TEXT, status TEXT);"
-            "INSERT INTO tasks VALUES ('A','todo');"
+            "CREATE TABLE tasks (title TEXT, status TEXT);INSERT INTO tasks VALUES ('A','todo');"
         )
         conn.commit()
         conn.close()
@@ -527,9 +534,7 @@ class TestAgentLog:
 class TestReadOnlyGuarantee:
     """The collector must never be able to mutate Hermes' state."""
 
-    def test_writes_through_the_collector_connection_are_refused(
-        self, tmp_path: Path
-    ) -> None:
+    def test_writes_through_the_collector_connection_are_refused(self, tmp_path: Path) -> None:
         _session_db(tmp_path)
         with pytest.raises(sqlite3.Error):
             HermesStateCollector._connect(tmp_path / "state.db").execute(
@@ -572,8 +577,10 @@ class TestReadOnlyGuarantee:
         _session_db(tmp_path)
         blocker = sqlite3.connect(tmp_path / "state.db", timeout=0.1)
         blocker.execute("BEGIN EXCLUSIVE")
-        blocker.execute("INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                        ("x", "tui", "m", 1, None, 0, 0, 0, 0, 0, "t", None, 0))
+        blocker.execute(
+            "INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            ("x", "tui", "m", 1, None, 0, 0, 0, 0, 0, "t", None, 0),
+        )
         try:
             snapshot = _collector(tmp_path).collect()
             assert snapshot.session.id == ""
@@ -590,16 +597,28 @@ class TestSnapshotFromPanel:
         _kanban_db(tmp_path, "INSERT INTO tasks VALUES ('a','A','todo',1,10);")
         panel = {
             "session": {
-                "id": "live", "source": "tui", "model": "gpt-test",
-                "title": "ship v1", "status": "working", "current_tool": "none",
-                "last_activity": 1000.0, "input_tokens": 10, "output_tokens": 2,
-                "context_limit": 1024, "context_percent": 1, "message_count": 1,
+                "id": "live",
+                "source": "tui",
+                "model": "gpt-test",
+                "title": "ship v1",
+                "status": "working",
+                "current_tool": "none",
+                "last_activity": 1000.0,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "context_limit": 1024,
+                "context_percent": 1,
+                "message_count": 1,
                 "tool_call_count": 0,
             },
             "tasks": [{"title": "ship v1", "status": "pending", "source": "session"}],
             "kanban_active": 1,
-            "memory": {"fact_count": 0, "average_trust": 0.0,
-                       "retrieved_facts": 0, "profile_chars": 0},
+            "memory": {
+                "fact_count": 0,
+                "average_trust": 0.0,
+                "retrieved_facts": 0,
+                "profile_chars": 0,
+            },
             "recent_events": ["tool terminal completed"],
         }
         snapshot = DashboardSnapshot.from_panel(panel, "2026-07-24T12:00:00+00:00")

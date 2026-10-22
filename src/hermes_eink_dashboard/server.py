@@ -79,13 +79,28 @@ def parse_layout_yaml(content: str) -> dict[str, Any]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Serve device-neutral Hermes data for E-Ink dashboards")
+    parser = argparse.ArgumentParser(
+        description="Serve device-neutral Hermes data for E-Ink dashboards"
+    )
     parser.add_argument("--host", default=os.getenv("HERMES_DASHBOARD_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("HERMES_DASHBOARD_PORT", "9120")))
-    parser.add_argument("--width", type=int, default=int(os.getenv("HERMES_DASHBOARD_WIDTH", "1072")))
-    parser.add_argument("--height", type=int, default=int(os.getenv("HERMES_DASHBOARD_HEIGHT", "1448")))
-    parser.add_argument("--bit-depth", type=int, choices=(1, 8), default=int(os.getenv("HERMES_DASHBOARD_BIT_DEPTH", "1")))
-    parser.add_argument("--context-limit", type=int, default=int(os.getenv("HERMES_DASHBOARD_CONTEXT_LIMIT", "262144")))
+    parser.add_argument(
+        "--width", type=int, default=int(os.getenv("HERMES_DASHBOARD_WIDTH", "1072"))
+    )
+    parser.add_argument(
+        "--height", type=int, default=int(os.getenv("HERMES_DASHBOARD_HEIGHT", "1448"))
+    )
+    parser.add_argument(
+        "--bit-depth",
+        type=int,
+        choices=(1, 8),
+        default=int(os.getenv("HERMES_DASHBOARD_BIT_DEPTH", "1")),
+    )
+    parser.add_argument(
+        "--context-limit",
+        type=int,
+        default=int(os.getenv("HERMES_DASHBOARD_CONTEXT_LIMIT", "262144")),
+    )
     parser.add_argument(
         "--refresh-seconds",
         type=_positive_float,
@@ -95,7 +110,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         help="seconds between local Hermes collection runs",
     )
-    parser.add_argument("--hermes-home", type=Path, default=Path(os.getenv("HERMES_HOME", "~/.hermes")).expanduser())
+    parser.add_argument(
+        "--hermes-home", type=Path, default=Path(os.getenv("HERMES_HOME", "~/.hermes")).expanduser()
+    )
     parser.add_argument("--token", default=os.getenv("HERMES_DASHBOARD_TOKEN", ""))
     parser.add_argument(
         "--token-file",
@@ -109,10 +126,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--control-token-file",
         type=Path,
         default=Path(
-            os.getenv("HERMES_DASHBOARD_CONTROL_TOKEN_FILE") or (resolve_config_dir() / "control_token")
+            os.getenv("HERMES_DASHBOARD_CONTROL_TOKEN_FILE")
+            or (resolve_config_dir() / "control_token")
         ).expanduser(),
     )
-    parser.add_argument("--layout-yaml", type=Path, help="path to layout YAML file to override default layout")
+    parser.add_argument(
+        "--layout-yaml", type=Path, help="path to layout YAML file to override default layout"
+    )
     parser.add_argument(
         "--devices-file",
         type=Path,
@@ -159,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
         # to PNG. This shares the aggregator/collector with the live service
         # but does not start any background tasks.
         from .contract import PanelCache as _PanelCache
+
         cache = _PanelCache()
         providers: list[Aggregator] = [
             HermesAggregator(collector=collector, interval_seconds=args.refresh_seconds),
@@ -175,10 +196,13 @@ def main(argv: list[str] | None = None) -> int:
             args.width, args.height, panels=("hermes", "prompt_response")
         )
         image = render_layout_dashboard(
-            layout, cache.snapshot(), RenderOptions(width=args.width, height=args.height, bit_depth=args.bit_depth)
+            layout,
+            cache.snapshot(),
+            RenderOptions(width=args.width, height=args.height, bit_depth=args.bit_depth),
         )
         args.render_once.parent.mkdir(parents=True, exist_ok=True)
         from io import BytesIO as _BytesIO
+
         buf = _BytesIO()
         image.save(buf, format="PNG", optimize=True)
         args.render_once.write_bytes(buf.getvalue())
@@ -204,11 +228,16 @@ def main(argv: list[str] | None = None) -> int:
     # the trusted host via hermes_controls.yaml. Without that file they stay
     # disabled and the layout keeps its generic placeholder tiles.
     controls_config = load_controls_config(actions_dir / "hermes_controls.yaml", logger=LOGGER)
-    register_hermes_controls(registry, actions_dir, controls_config, CliTransport(controls_config), logger=LOGGER)
+    register_hermes_controls(
+        registry, actions_dir, controls_config, CliTransport(controls_config), logger=LOGGER
+    )
     effective_layout = layout_override
     if effective_layout is None:
         effective_layout = build_default_layout(
-            args.width, args.height, panels=("hermes", "prompt_response"), control_tiles=control_tiles(controls_config)
+            args.width,
+            args.height,
+            panels=("hermes", "prompt_response"),
+            control_tiles=control_tiles(controls_config),
         )
     app = create_app(
         ApiSettings(
@@ -236,8 +265,6 @@ def main(argv: list[str] | None = None) -> int:
     # Access logging is disabled because legacy Kindle requests may contain a query token.
     uvicorn.run(app, host=args.host, port=args.port, access_log=False)
     return 0
-
-
 
 
 if __name__ == "__main__":
