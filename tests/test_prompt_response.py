@@ -14,14 +14,14 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from hermes_kindle_dashboard.aggregators.prompt_response import (
+from hermes_eink_dashboard.aggregators.prompt_response import (
     PromptResponseAggregator,
     build_prompt_response_panel,
     sanitize_excerpt,
 )
-from hermes_kindle_dashboard.api import ApiSettings, create_app
-from hermes_kindle_dashboard.contract import PanelCache, build_default_layout
-from hermes_kindle_dashboard.render import RenderOptions, render_layout_dashboard
+from hermes_eink_dashboard.api import ApiSettings, create_app
+from hermes_eink_dashboard.contract import PanelCache, build_default_layout
+from hermes_eink_dashboard.render import RenderOptions, render_layout_dashboard
 
 
 def _write_result(config_dir: Path, name: str, payload: dict) -> Path:
@@ -302,12 +302,12 @@ class _AnsweringTransport:
 
 
 def test_ask_tile_dispatch_lands_on_the_device_panel(tmp_path: Path) -> None:
-    from hermes_kindle_dashboard.actions import ActionRegistry
-    from hermes_kindle_dashboard.hermes_controls import (
+    from hermes_eink_dashboard.actions import ActionRegistry
+    from hermes_eink_dashboard.hermes_controls import (
         HermesControlsConfig,
         register_hermes_controls,
     )
-    from hermes_kindle_dashboard.scheduler import collect_once
+    from hermes_eink_dashboard.scheduler import collect_once
 
     transport = _AnsweringTransport("Standup notes are ready.")
     config = HermesControlsConfig(quick_prompts={"standup": "Draft a standup update."})

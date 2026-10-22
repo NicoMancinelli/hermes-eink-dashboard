@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, computed_field, field_validator
 
+from .paths import resolve_config_dir
+
 
 class ConfigSchema(BaseModel):
     """Declarative configuration schema for the KUAL client config.sh."""
@@ -15,7 +17,7 @@ class ConfigSchema(BaseModel):
     # Required keys (must be provided)
     host_ip: str = Field(
         ...,
-        description="LAN/tailnet address of the host running hermes-kindle-dashboard",
+        description="LAN/tailnet address of the host running hermes-eink-dashboard",
         pattern=r"^[A-Za-z0-9._:-]+$",
     )
     host_port: int = Field(default=9120, ge=1, le=65535, description="HTTP port on the host")
@@ -105,7 +107,7 @@ DEFAULT_TEMPLATE = """# Hermes Dashboard Kindle client configuration.
 # Copy to config.sh and replace HOST_IP and CHANGE_ME.
 #
 # Required keys:
-#   HOST_IP          - LAN/tailnet address of the host running hermes-kindle-dashboard.
+#   HOST_IP          - LAN/tailnet address of the host running hermes-eink-dashboard.
 #   HOST_PORT        - HTTP port on the host (default 9120).
 #   DASHBOARD_TOKEN  - Read token. Used for /dashboard.png and /dashboard.json.
 #
@@ -151,7 +153,7 @@ class ConfigManager:
     """Manages the declarative configuration file and config.sh regeneration."""
 
     config_path: Path = field(
-        default_factory=lambda: Path("~/.config/hermes-kindle-dashboard/config.yaml").expanduser()
+        default_factory=lambda: (resolve_config_dir() / "config.yaml").expanduser()
     )
     template_path: Path = field(
         default_factory=lambda: ConfigManager._resolve_template_path()
@@ -165,7 +167,7 @@ class ConfigManager:
         pollute the tracked source. The bundle builder overrides this with
         its own destination via ``regenerate_config_sh(output_path=...)``.
         """
-        return Path("~/.config/hermes-kindle-dashboard/rendered/config.sh").expanduser().resolve()
+        return (resolve_config_dir() / "rendered" / "config.sh").expanduser().resolve()
 
     @property
     def output_path(self) -> Path:

@@ -13,7 +13,7 @@ The KUAL bundle has two build modes:
   publish as a release artifact. After installing on the Kindle, run
   `bin/post_install.sh` to inject the real host and tokens.
 - **Personal mode** (`--inject-tokens`): the bundle contains the real
-  read and control tokens from `~/.config/hermes-kindle-dashboard/`.
+  read and control tokens from `~/.config/hermes-eink-dashboard/`.
   Do NOT publish this artifact — anyone who downloads it can hit your
   host's `/control` endpoints with write access.
 
@@ -21,8 +21,8 @@ The KUAL bundle has two build modes:
 `chmod 600`. The Kindle's filesystem is encrypted at rest on modern
 firmware, but treat it as sensitive.
 
-Rotate tokens by replacing `~/.config/hermes-kindle-dashboard/token` and
-`~/.config/hermes-kindle-dashboard/control_token`, restarting the service,
+Rotate tokens by replacing `~/.config/hermes-eink-dashboard/token` and
+`~/.config/hermes-eink-dashboard/control_token`, restarting the service,
 and rebuilding + re-installing the KUAL bundle.
 
 ## Interactive controls security

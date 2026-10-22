@@ -1,6 +1,6 @@
 # Hermes-native controls for the E-Ink dashboard.
 #
-# Copy to ~/.config/hermes-kindle-dashboard/hermes_controls.yaml and restart
+# Copy to ~/.config/hermes-eink-dashboard/hermes_controls.yaml and restart
 # the service. Each entry below becomes an actionable tile on the Kindle:
 #
 #   quick_prompts -> tiles labelled "Ask: <Name>" firing action

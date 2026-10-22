@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from hermes_kindle_dashboard.actions import ActionRegistry, UnknownActionError
-from hermes_kindle_dashboard.actions_runtime import (
+from hermes_eink_dashboard.actions import ActionRegistry, UnknownActionError
+from hermes_eink_dashboard.actions_runtime import (
     AlertDismissAction,
     ContextSetAction,
     RefreshAction,
@@ -17,7 +17,7 @@ from hermes_kindle_dashboard.actions_runtime import (
     parse_action_config,
     register_all_actions,
 )
-from hermes_kindle_dashboard.contract import PanelCache
+from hermes_eink_dashboard.contract import PanelCache
 
 
 def test_workflow_runs_safe_argv(tmp_path: Path):
@@ -166,7 +166,7 @@ def test_actions_yaml_size_limit_exceeded(tmp_path: Path, caplog: pytest.LogCapt
 
     actions_yaml.write_text(big_content, encoding="utf-8")
 
-    from hermes_kindle_dashboard.actions_runtime import load_action_config
+    from hermes_eink_dashboard.actions_runtime import load_action_config
     res = load_action_config(actions_yaml)
     assert res == {}
     assert "exceeds maximum allowed size of 1MB" in caplog.text

@@ -2,7 +2,7 @@
 # Copy to config.sh and replace HOST_IP and CHANGE_ME.
 #
 # Required keys:
-#   HOST_IP          - LAN/tailnet address of the host running hermes-kindle-dashboard.
+#   HOST_IP          - LAN/tailnet address of the host running hermes-eink-dashboard.
 #   HOST_PORT        - HTTP port on the host (default 9120).
 #   DASHBOARD_TOKEN  - Read token. Used for /dashboard.png and /dashboard.json.
 #

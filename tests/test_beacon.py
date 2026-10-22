@@ -5,7 +5,7 @@ import asyncio
 import json
 import socket
 
-from hermes_kindle_dashboard.beacon import (
+from hermes_eink_dashboard.beacon import (
     BeaconConfig,
     DEFAULT_DISCOVERY_PORT,
     broadcast_once,

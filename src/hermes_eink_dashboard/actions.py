@@ -6,7 +6,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable, Iterable
 
-LOGGER = logging.getLogger("hermes-kindle-dashboard.actions")
+LOGGER = logging.getLogger("hermes-eink-dashboard.actions")
 
 
 class ActionError(Exception):

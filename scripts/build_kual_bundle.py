@@ -9,7 +9,7 @@ Two build modes are supported:
    post-install flow on the Kindle.
 
 2. **Personal mode** (``--inject-tokens``): embeds the user's real tokens
-   from ``~/.config/hermes-kindle-dashboard/{token,control_token}``. Use
+   from ``~/.config/hermes-eink-dashboard/{token,control_token}``. Use
    this to produce a per-host bundle. Never publish this artifact.
 
 The bundle layout:
@@ -30,6 +30,7 @@ import hashlib
 import json
 import re
 import shutil
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
@@ -37,6 +38,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "kindle" / "hermes_dashboard"
+sys.path.insert(0, str(ROOT / "src"))
+
+from hermes_eink_dashboard.paths import resolve_config_dir  # noqa: E402
 SAFE_HOST = re.compile(r"^[A-Za-z0-9._:-]+$")
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9._~-]+$")
 PLACEHOLDER_HOST = "PLACEHOLDER.lan"
@@ -55,12 +59,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--token-file",
         type=Path,
-        default=Path("~/.config/hermes-kindle-dashboard/token").expanduser(),
+        default=(resolve_config_dir() / "token").expanduser(),
     )
     parser.add_argument(
         "--control-token-file",
         type=Path,
-        default=Path("~/.config/hermes-kindle-dashboard/control_token").expanduser(),
+        default=(resolve_config_dir() / "control_token").expanduser(),
     )
     parser.add_argument(
         "--output",

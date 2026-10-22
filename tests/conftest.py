@@ -6,7 +6,7 @@ when the package is installed in editable mode without putting those
 sibling packages on sys.path.
 
 The CI workflow installs ``.[dev]`` which only installs
-``hermes_kindle_dashboard`` (under ``src/``) — the ``kindle/`` package is
+``hermes_eink_dashboard`` (under ``src/``) — the ``kindle/`` package is
 not yet a Python distribution, so tests need the repo root to import
 modules from it.
 """

@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from hermes_kindle_dashboard.api import ApiSettings, create_app
-from hermes_kindle_dashboard.pairing import (
+from hermes_eink_dashboard.api import ApiSettings, create_app
+from hermes_eink_dashboard.pairing import (
     DeviceStore,
     PairingService,
     PollResult,
@@ -108,7 +108,7 @@ class TestDeviceStore:
         assert view["display_code"] == display_code_for(DEVICE_ID)
 
     def test_max_pending_devices_cap(self, store: DeviceStore) -> None:
-        from hermes_kindle_dashboard.pairing import MAX_PENDING_DEVICES
+        from hermes_eink_dashboard.pairing import MAX_PENDING_DEVICES
 
         for index in range(MAX_PENDING_DEVICES):
             device_id = f"{index:016x}"
@@ -125,7 +125,7 @@ class TestPairingService:
             pairing.poll(DEVICE_ID, "short")
 
     def test_poll_rate_limited(self, pairing: PairingService, monkeypatch: pytest.MonkeyPatch) -> None:
-        from hermes_kindle_dashboard import pairing as pairing_module
+        from hermes_eink_dashboard import pairing as pairing_module
 
         monkeypatch.setattr(pairing_module, "POLL_RATE_LIMIT_PER_MINUTE", 3)
         for _ in range(3):
@@ -133,7 +133,7 @@ class TestPairingService:
         assert pairing.poll(DEVICE_ID, DEVICE_SECRET).status == "rate_limited"
 
     def test_name_sanitized(self, pairing: PairingService) -> None:
-        from hermes_kindle_dashboard.pairing import PairingValidationError
+        from hermes_eink_dashboard.pairing import PairingValidationError
 
         with pytest.raises(PairingValidationError):
             pairing.poll(DEVICE_ID, DEVICE_SECRET, name="bad name!")
@@ -212,13 +212,13 @@ class TestPairingEndpoints:
 
 class TestPairCli:
     def test_missing_control_token_file_exits_1(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        from hermes_kindle_dashboard.pair_cli import main as cli_main
+        from hermes_eink_dashboard.pair_cli import main as cli_main
 
         assert cli_main(["list", "--control-token-file", str(tmp_path / "absent")]) == 1
         assert "no control token" in capsys.readouterr().err
 
     def test_approve_requires_device_argument(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        from hermes_kindle_dashboard.pair_cli import main as cli_main
+        from hermes_eink_dashboard.pair_cli import main as cli_main
 
         assert cli_main(["approve", "--control-token-file", str(tmp_path / "absent")]) == 2
         assert "requires a display code" in capsys.readouterr().err

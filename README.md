@@ -77,7 +77,7 @@ python3 scripts/build_kual_bundle.py --output dist/hermes-dashboard-kual.zip
 For personal/dev builds that embed real tokens directly (do NOT publish these):
 
 ```bash
-python3 scripts/build_kual_bundle.py   --inject-tokens   --host 192.168.1.42   --token-file ~/.config/hermes-kindle-dashboard/token
+python3 scripts/build_kual_bundle.py   --inject-tokens   --host 192.168.1.42   --token-file ~/.config/hermes-eink-dashboard/token
 ```
 
 ## What it shows
@@ -117,7 +117,7 @@ kindle/hermes_dashboard/     KUAL extension source
   bin/start_wizard.sh         pairing wizard launcher
   client/setup_wizard.py      zero-typing first-run wizard (discovery+pairing)
   client/interactive.py       interactive tile client (5-way + touch)
-src/hermes_kindle_dashboard/
+src/hermes_eink_dashboard/
   aggregators/              independent panel providers
   contract.py               versioned device-neutral panel cache
   scheduler.py              serial refresh loops and backoff
@@ -127,7 +127,9 @@ src/hermes_kindle_dashboard/
   pairing.py                 device store + OAuth-device-flow pairing service
   pair_cli.py                hermes-dashboard-pair admin CLI (approve/deny)
   beacon.py                  secret-less LAN discovery beacon (UDP)
+  paths.py                   runtime directory resolution (rename migration)
   server.py                  CLI and Uvicorn entry point
+src/hermes_kindle_dashboard/ deprecated import alias for the package above
 systemd/                     hardened user service
 scripts/
   install_host.sh            host installer
@@ -190,11 +192,11 @@ cd hermes-eink-dashboard
 
 The installer creates:
 
-- isolated venv: `~/.local/share/hermes-kindle-dashboard/venv`
-- private config: `~/.config/hermes-kindle-dashboard/host.env`
-- private random read token: `~/.config/hermes-kindle-dashboard/token`
-- private random control token: `~/.config/hermes-kindle-dashboard/control_token`
-- user service: `~/.config/systemd/user/hermes-kindle-dashboard.service`
+- isolated venv: `~/.local/share/hermes-eink-dashboard/venv`
+- private config: `~/.config/hermes-eink-dashboard/host.env`
+- private random read token: `~/.config/hermes-eink-dashboard/token`
+- private random control token: `~/.config/hermes-eink-dashboard/control_token`
+- user service: `~/.config/systemd/user/hermes-eink-dashboard.service`
 
 The control token enables `POST /control`, `GET /control/events`,
 `GET /config`, and `POST /config`. Without it, those endpoints return
@@ -206,9 +208,9 @@ access). The KUAL bundle for your Kindle can either embed both tokens
 Verify it without exposing the token:
 
 ```sh
-systemctl --user status hermes-kindle-dashboard
+systemctl --user status hermes-eink-dashboard
 curl -fsS http://192.168.1.50:9120/healthz
-TOKEN=$(cat ~/.config/hermes-kindle-dashboard/token)
+TOKEN=$(cat ~/.config/hermes-eink-dashboard/token)
 curl -fsS -H "Authorization: Bearer $TOKEN" \
   http://192.168.1.50:9120/dashboard-data -o /tmp/dashboard-data.json
 curl -fsS "http://192.168.1.50:9120/dashboard.png?token=$TOKEN" \
@@ -217,6 +219,27 @@ file /tmp/hermes-dashboard.png
 ```
 
 If the host firewall blocks the port, allow TCP 9120 **only from the Kindle/LAN subnet**. Do not expose this service to the public internet.
+
+## Upgrading from `hermes-kindle-dashboard`
+
+The project was renamed from `hermes-kindle-dashboard` to
+`hermes-eink-dashboard` (the Kindle client is one adapter among several
+possible E-Ink devices). Nothing breaks for existing installs:
+
+- **Config and tokens move to `~/.config/hermes-eink-dashboard/`.** Re-run
+  `scripts/install_host.sh` (or the one-liner installer): it copies the
+  tokens, paired-device records and action state across, keeps the old
+  directory as `~/.config/hermes-kindle-dashboard.migrated`, and retires the
+  old `hermes-kindle-dashboard.service` unit. Until you re-run it, the
+  service still finds the legacy directory on its own.
+- **The service unit is now `hermes-eink-dashboard.service`** and the console
+  command is `hermes-eink-dashboard`. The old `hermes-kindle-dashboard`
+  command still exists as an alias.
+- **Python imports keep working**: `import hermes_kindle_dashboard` resolves
+  to the same modules as `hermes_eink_dashboard` and emits a
+  `DeprecationWarning`. New code should use the new name.
+
+See [CONSOLIDATION.md](CONSOLIDATION.md) for the full rationale.
 
 ## Build and install the KUAL extension
 
@@ -239,8 +262,8 @@ python3 scripts/build_kual_bundle.py \
   --inject-tokens \
   --host 192.168.1.50 \
   --port 9120 \
-  --token-file ~/.config/hermes-kindle-dashboard/token \
-  --control-token-file ~/.config/hermes-kindle-dashboard/control_token \
+  --token-file ~/.config/hermes-eink-dashboard/token \
+  --control-token-file ~/.config/hermes-eink-dashboard/control_token \
   --output dist/hermes-dashboard-kual-personal.zip
 ```
 
@@ -320,12 +343,12 @@ covered by unit tests with synthetic event streams; exercising it needs real
 hardware or root-owned `uinput`, which CI does not have.
 
 # Render from live Hermes state without starting HTTP.
-.venv/bin/hermes-kindle-dashboard \
+.venv/bin/hermes-eink-dashboard \
   --render-once /tmp/hermes-dashboard.png --width 600 --height 800
 
 # Local-only HTTP server.
 TOKEN=development-only
-.venv/bin/hermes-kindle-dashboard --host 127.0.0.1 --port 9120 --token "$TOKEN"
+.venv/bin/hermes-eink-dashboard --host 127.0.0.1 --port 9120 --token "$TOKEN"
 ```
 
 ## HTTP API
@@ -411,7 +434,7 @@ The host-side interactive layer is in place:
 - `--focus-tile` / `focus_tile_id` query parameter on `/dashboard.png`
   highlights the focused tile in the rendered PNG.
 - Declarative `/config` endpoint lets the host push KUAL config changes
-  to `~/.config/hermes-kindle-dashboard/config.yaml`.
+  to `~/.config/hermes-eink-dashboard/config.yaml`.
 
 **Requirements for the interactive client on the Kindle**: Python 3 (install
 via `mrpackage` if not already present). The legacy read-only `fetch.sh`
@@ -441,7 +464,7 @@ loop in the KUAL bundle does NOT require Python.
 ## Hermes-native controls (ask the agent from the Kindle)
 
 Beyond generic shell workflows, tiles can drive Hermes itself. Create
-`~/.config/hermes-kindle-dashboard/hermes_controls.yaml` (see
+`~/.config/hermes-eink-dashboard/hermes_controls.yaml` (see
 [examples/hermes_controls.yaml](examples/hermes_controls.yaml)) and restart
 the service:
 
@@ -498,7 +521,7 @@ See [SECURITY.md](SECURITY.md) for reporting and deployment guidance.
 ## Troubleshooting
 
 ```sh
-journalctl --user -u hermes-kindle-dashboard -n 100 --no-pager
+journalctl --user -u hermes-eink-dashboard -n 100 --no-pager
 curl -v http://HOST:9120/healthz
 ```
 

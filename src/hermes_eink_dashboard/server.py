@@ -24,11 +24,12 @@ from .hermes_controls import (
     register_hermes_controls,
 )
 from .pairing import DeviceStore, PairingService
+from .paths import resolve_config_dir
 from .render import RenderOptions, render_dashboard, render_layout_dashboard
 from .scheduler import ControlBus, collect_once
 from .state import DashboardConfig, HermesStateCollector
 
-LOGGER = logging.getLogger("hermes-kindle-dashboard")
+LOGGER = logging.getLogger("hermes-eink-dashboard")
 
 
 def _discovery_default() -> int:
@@ -98,19 +99,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--token-file",
         type=Path,
-        default=Path(os.getenv("HERMES_DASHBOARD_TOKEN_FILE", "~/.config/hermes-kindle-dashboard/token")).expanduser(),
+        default=Path(
+            os.getenv("HERMES_DASHBOARD_TOKEN_FILE") or (resolve_config_dir() / "token")
+        ).expanduser(),
     )
     parser.add_argument("--control-token", default=os.getenv("HERMES_DASHBOARD_CONTROL_TOKEN", ""))
     parser.add_argument(
         "--control-token-file",
         type=Path,
-        default=Path(os.getenv("HERMES_DASHBOARD_CONTROL_TOKEN_FILE", "~/.config/hermes-kindle-dashboard/control_token")).expanduser(),
+        default=Path(
+            os.getenv("HERMES_DASHBOARD_CONTROL_TOKEN_FILE") or (resolve_config_dir() / "control_token")
+        ).expanduser(),
     )
     parser.add_argument("--layout-yaml", type=Path, help="path to layout YAML file to override default layout")
     parser.add_argument(
         "--devices-file",
         type=Path,
-        default=Path(os.getenv("HERMES_DASHBOARD_DEVICES_FILE", "~/.config/hermes-kindle-dashboard/devices.json")).expanduser(),
+        default=Path(
+            os.getenv("HERMES_DASHBOARD_DEVICES_FILE") or (resolve_config_dir() / "devices.json")
+        ).expanduser(),
         help="where paired device records are stored (mode 0600)",
     )
     parser.add_argument(
@@ -138,8 +145,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     config = DashboardConfig.from_home(args.hermes_home, context_limit=args.context_limit)
     collector = HermesStateCollector(config)
-    actions_dir_str = os.getenv("HERMES_DASHBOARD_ACTIONS_DIR", "~/.config/hermes-kindle-dashboard")
-    actions_dir = Path(actions_dir_str).expanduser()
+    actions_dir = Path(
+        os.getenv("HERMES_DASHBOARD_ACTIONS_DIR") or resolve_config_dir()
+    ).expanduser()
 
     layout_override = None
     if args.layout_yaml and args.layout_yaml.exists():

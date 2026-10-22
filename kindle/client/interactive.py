@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 
-LOGGER = logging.getLogger("hermes-kindle-dashboard.client")
+LOGGER = logging.getLogger("hermes-eink-dashboard.client")
 
 
 # Linux input event types and key/axis codes (see /usr/include/linux/input-event-codes.h).

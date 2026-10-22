@@ -311,7 +311,7 @@ def create_app(
 
     @app.post("/pair/poll")
     async def post_pair_poll(request: Request) -> JSONResponse:
-        """Unauthenticated device-flow poll; see hermes_kindle_dashboard.pairing."""
+        """Unauthenticated device-flow poll; see hermes_eink_dashboard.pairing."""
         if settings.pairing is None:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="pairing unavailable")
         body = await _json_body(request)

@@ -23,10 +23,10 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from hermes_kindle_dashboard.aggregators.prompt_response import build_prompt_response_panel  # noqa: E402
-from hermes_kindle_dashboard.contract import PanelCache, build_default_layout  # noqa: E402
-from hermes_kindle_dashboard.hermes_controls import HermesControlsConfig, control_tiles  # noqa: E402
-from hermes_kindle_dashboard.render import RenderOptions, render_layout_dashboard  # noqa: E402
+from hermes_eink_dashboard.aggregators.prompt_response import build_prompt_response_panel  # noqa: E402
+from hermes_eink_dashboard.contract import PanelCache, build_default_layout  # noqa: E402
+from hermes_eink_dashboard.hermes_controls import HermesControlsConfig, control_tiles  # noqa: E402
+from hermes_eink_dashboard.render import RenderOptions, render_layout_dashboard  # noqa: E402
 from tests.test_render import sample_snapshot  # noqa: E402
 
 SIZES = ((1072, 1448, "dashboard-paperwhite.png"), (600, 800, "dashboard-classic.png"))

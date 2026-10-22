@@ -44,8 +44,9 @@ if [ "$WIDTH" -lt 320 ] || [ "$HEIGHT" -lt 480 ]; then echo "Display must be at 
 if [ "$CONTEXT_LIMIT" -lt 1 ]; then echo "Context limit must be positive" >&2; exit 2; fi
 if [ "$REFRESH_SECONDS" -lt 1 ]; then echo "Refresh interval must be positive" >&2; exit 2; fi
 
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-kindle-dashboard"
-DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/hermes-kindle-dashboard"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-eink-dashboard"
+LEGACY_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes-kindle-dashboard"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/hermes-eink-dashboard"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 TOKEN_FILE="$CONFIG_DIR/token"
 CONTROL_TOKEN_FILE="$CONFIG_DIR/control_token"
@@ -54,6 +55,34 @@ VENV="$DATA_DIR/venv"
 
 mkdir -p "$CONFIG_DIR" "$DATA_DIR" "$UNIT_DIR"
 chmod 700 "$CONFIG_DIR"
+
+# Migrate a pre-rename installation: the project used to live under
+# ~/.config/hermes-kindle-dashboard. Tokens, paired devices and action state
+# are carried over so an upgrade never invalidates a paired Kindle. The old
+# directory is kept as a ".migrated" backup instead of being deleted.
+migrate_legacy_config() {
+  [ -d "$LEGACY_CONFIG_DIR" ] || return 0
+  echo "Migrating $LEGACY_CONFIG_DIR -> $CONFIG_DIR"
+  for name in token control_token devices.json actions.yaml dismissed_alerts.json \
+    context.json config.yaml hermes_controls.yaml; do
+    [ -f "$LEGACY_CONFIG_DIR/$name" ] || continue
+    [ -e "$CONFIG_DIR/$name" ] && continue
+    cp -p "$LEGACY_CONFIG_DIR/$name" "$CONFIG_DIR/$name"
+  done
+  for name in actions rendered; do
+    [ -d "$LEGACY_CONFIG_DIR/$name" ] || continue
+    [ -d "$CONFIG_DIR/$name" ] && continue
+    cp -R "$LEGACY_CONFIG_DIR/$name" "$CONFIG_DIR/$name"
+  done
+  BACKUP_DIR="${LEGACY_CONFIG_DIR}.migrated"
+  if [ -e "$BACKUP_DIR" ]; then
+    BACKUP_DIR="${LEGACY_CONFIG_DIR}.migrated.$(date +%s)"
+  fi
+  mv "$LEGACY_CONFIG_DIR" "$BACKUP_DIR"
+  echo "Previous configuration kept at $BACKUP_DIR"
+}
+
+migrate_legacy_config
 if [ ! -s "$TOKEN_FILE" ]; then
   umask 077
   python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > "$TOKEN_FILE"
@@ -83,15 +112,19 @@ HERMES_DASHBOARD_CONTROL_TOKEN_FILE=$CONTROL_TOKEN_FILE
 HERMES_HOME=$HOME/.hermes
 EOF
 chmod 600 "$ENV_FILE"
-install -m 0644 "$ROOT/systemd/hermes-kindle-dashboard.service" "$UNIT_DIR/hermes-kindle-dashboard.service"
+install -m 0644 "$ROOT/systemd/hermes-eink-dashboard.service" "$UNIT_DIR/hermes-eink-dashboard.service"
 
 # Skip systemd integration when running in a chroot/test environment without
 # a user bus. Detected by trying systemctl and falling back gracefully.
 if systemctl --user >/dev/null 2>&1; then
+  # Retire the pre-rename unit so the old service cannot keep running with
+  # the pre-rename paths.
+  systemctl --user disable --now hermes-kindle-dashboard.service >/dev/null 2>&1 || true
+  rm -f "$UNIT_DIR/hermes-kindle-dashboard.service"
   systemctl --user daemon-reload
   if [ "$START_SERVICE" = "1" ]; then
-    systemctl --user enable hermes-kindle-dashboard.service >/dev/null
-    systemctl --user restart hermes-kindle-dashboard.service
+    systemctl --user enable hermes-eink-dashboard.service >/dev/null
+    systemctl --user restart hermes-eink-dashboard.service
   fi
 else
   echo "(no user systemd bus available; unit installed but not enabled)"
@@ -102,5 +135,8 @@ echo "API: http://$BIND_HOST:$PORT/dashboard-data"
 echo "Kindle compatibility: http://$BIND_HOST:$PORT/dashboard.png"
 echo "Read token:    $TOKEN_FILE (not printed)"
 echo "Control token: $CONTROL_TOKEN_FILE (not printed)"
+if [ -d "${XDG_DATA_HOME:-$HOME/.local/share}/hermes-kindle-dashboard" ]; then
+  echo "Note: the old data directory ${XDG_DATA_HOME:-$HOME/.local/share}/hermes-kindle-dashboard is unused now and can be removed."
+fi
 echo "Next: build the KUAL ZIP:"
 echo "  python3 scripts/build_kual_bundle.py --host <Kindle-reachable-host> --inject-tokens"

@@ -1,7 +1,7 @@
 import asyncio
 
-from hermes_kindle_dashboard.contract import PanelCache
-from hermes_kindle_dashboard.scheduler import collect_once, run_aggregator_loop
+from hermes_eink_dashboard.contract import PanelCache
+from hermes_eink_dashboard.scheduler import collect_once, run_aggregator_loop
 
 
 class SuccessfulAggregator:
@@ -130,7 +130,7 @@ def test_aggregator_loop_never_overlaps_collection() -> None:
 
 
 def test_control_bus_publish_and_receive() -> None:
-    from hermes_kindle_dashboard.scheduler import ControlBus
+    from hermes_eink_dashboard.scheduler import ControlBus
 
     bus = ControlBus()
 
@@ -144,7 +144,7 @@ def test_control_bus_publish_and_receive() -> None:
 
 
 def test_control_bus_wait_timeout() -> None:
-    from hermes_kindle_dashboard.scheduler import ControlBus
+    from hermes_eink_dashboard.scheduler import ControlBus
 
     bus = ControlBus()
 
@@ -156,7 +156,7 @@ def test_control_bus_wait_timeout() -> None:
 
 
 def test_control_bus_async_wakeup() -> None:
-    from hermes_kindle_dashboard.scheduler import ControlBus
+    from hermes_eink_dashboard.scheduler import ControlBus
 
     bus = ControlBus()
 

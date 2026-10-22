@@ -8,12 +8,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..contract import PanelData
+from ..paths import resolve_config_dir
 from ..state import DashboardSnapshot, HermesStateCollector
 
-LOGGER = logging.getLogger("hermes-kindle-dashboard.aggregators.hermes")
+LOGGER = logging.getLogger("hermes-eink-dashboard.aggregators.hermes")
 
 DEFAULT_CONFIG_DIR = Path(
-    os.environ.get("HERMES_DASHBOARD_ACTIONS_DIR", "~/.config/hermes-kindle-dashboard")
+    os.environ.get("HERMES_DASHBOARD_ACTIONS_DIR") or resolve_config_dir()
 ).expanduser()
 
 

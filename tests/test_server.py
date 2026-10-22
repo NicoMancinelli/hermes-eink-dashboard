@@ -5,9 +5,9 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from hermes_kindle_dashboard.aggregators.hermes import snapshot_to_panel
-from hermes_kindle_dashboard.api import ApiSettings, create_app
-from hermes_kindle_dashboard.server import build_parser
+from hermes_eink_dashboard.aggregators.hermes import snapshot_to_panel
+from hermes_eink_dashboard.api import ApiSettings, create_app
+from hermes_eink_dashboard.server import build_parser
 from test_render import sample_snapshot
 
 

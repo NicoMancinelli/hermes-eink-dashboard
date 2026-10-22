@@ -21,7 +21,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-DEFAULT_CONTROL_TOKEN_FILE = Path("~/.config/hermes-kindle-dashboard/control_token").expanduser()
+from .paths import resolve_config_dir
+
+DEFAULT_CONTROL_TOKEN_FILE = (resolve_config_dir() / "control_token").expanduser()
 
 
 def build_parser() -> argparse.ArgumentParser:
