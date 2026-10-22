@@ -238,14 +238,20 @@ class TestSessionSelection:
     def test_the_most_recently_active_session_wins(self, tmp_path: Path) -> None:
         conn = sqlite3.connect(tmp_path / "state.db")
         conn.executescript(SESSIONS_DDL)
-        for session_id, activity in (("older", 500), ("newest", 999)):
+        # Message ids are explicit rather than derived from hash(): CPython
+        # randomises str hashing per process (PYTHONHASHSEED), so a
+        # hash()-derived id collides roughly 1 run in 1000 and trips the
+        # UNIQUE constraint on messages.id.
+        for message_id, (session_id, activity) in enumerate(
+            (("older", 500), ("newest", 999)), start=1
+        ):
             conn.execute(
                 "INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (session_id, "tui", "gpt-test", 100, None, 1, 0, 10, 1, 0, "W", None, 0),
             )
             conn.execute(
                 "INSERT INTO messages VALUES (?,?,?,?,?,?)",
-                (hash(session_id) % 1000, session_id, "user", "x", None, activity),
+                (message_id, session_id, "user", "x", None, activity),
             )
         conn.commit()
         conn.close()
